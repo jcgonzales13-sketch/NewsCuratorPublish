@@ -1,0 +1,18 @@
+<Project Sdk="Microsoft.NET.Sdk.Worker">
+
+  <PropertyGroup>
+    <TargetFramework>net8.0</TargetFramework>
+    <Nullable>enable</Nullable>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <UserSecretsId>dotnet-AiNewsCurator.Worker-33f77aa1-83c4-4aa3-b706-6a8a6b8f13f5</UserSecretsId>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <PackageReference Include="Microsoft.Extensions.Hosting" Version="8.0.1" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\AiNewsCurator.Application\AiNewsCurator.Application.csproj" />
+    <ProjectReference Include="..\AiNewsCurator.Infrastructure\AiNewsCurator.Infrastructure.csproj" />
+  </ItemGroup>
+</Project>
