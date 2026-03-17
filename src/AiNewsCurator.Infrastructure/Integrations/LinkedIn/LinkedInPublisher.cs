@@ -12,12 +12,18 @@ namespace AiNewsCurator.Infrastructure.Integrations.LinkedIn;
 public sealed class LinkedInPublisher : ILinkedInPublisher
 {
     private readonly IHttpClientFactory _httpClientFactory;
+    private readonly ISettingsRepository _settingsRepository;
     private readonly AppOptions _options;
     private readonly ILogger<LinkedInPublisher> _logger;
 
-    public LinkedInPublisher(IHttpClientFactory httpClientFactory, IOptions<AppOptions> options, ILogger<LinkedInPublisher> logger)
+    public LinkedInPublisher(
+        IHttpClientFactory httpClientFactory,
+        ISettingsRepository settingsRepository,
+        IOptions<AppOptions> options,
+        ILogger<LinkedInPublisher> logger)
     {
         _httpClientFactory = httpClientFactory;
+        _settingsRepository = settingsRepository;
         _options = options.Value;
         _logger = logger;
     }
@@ -36,27 +42,34 @@ public sealed class LinkedInPublisher : ILinkedInPublisher
             };
         }
 
+        var credentials = await GetCredentialsAsync(cancellationToken);
         var payloadObject = new
         {
-            author = _options.LinkedInMemberUrn,
-            commentary = draft.PostText,
-            visibility = "PUBLIC",
-            distribution = new
-            {
-                feedDistribution = "MAIN_FEED",
-                targetEntities = Array.Empty<string>(),
-                thirdPartyDistributionChannels = Array.Empty<string>()
-            },
+            author = credentials.MemberUrn,
             lifecycleState = "PUBLISHED",
-            isReshareDisabledByAuthor = false
+            specificContent = new
+            {
+                comLinkedinUgcShareContent = new
+                {
+                    shareCommentary = new
+                    {
+                        text = draft.PostText
+                    },
+                    shareMediaCategory = "NONE"
+                }
+            },
+            visibility = new
+            {
+                comLinkedinUgcMemberNetworkVisibility = "PUBLIC"
+            }
         };
 
         var payload = JsonSerializer.Serialize(payloadObject);
         var client = _httpClientFactory.CreateClient("linkedin");
-        client.DefaultRequestHeaders.Authorization = new AuthenticationHeaderValue("Bearer", _options.LinkedInAccessToken);
+        client.DefaultRequestHeaders.Authorization = new AuthenticationHeaderValue("Bearer", credentials.AccessToken);
 
         using var response = await client.PostAsync(
-            "https://api.linkedin.com/rest/posts",
+            "https://api.linkedin.com/v2/ugcPosts",
             new StringContent(payload, Encoding.UTF8, "application/json"),
             cancellationToken);
 
@@ -84,16 +97,45 @@ public sealed class LinkedInPublisher : ILinkedInPublisher
 
     public Task<OperationResult> ValidateCredentialsAsync(CancellationToken cancellationToken)
     {
-        if (string.IsNullOrWhiteSpace(_options.LinkedInAccessToken) || string.IsNullOrWhiteSpace(_options.LinkedInMemberUrn))
-        {
-            return Task.FromResult(OperationResult.Failed("LinkedIn credentials are not configured."));
-        }
-
-        return Task.FromResult(OperationResult.Ok());
+        return ValidateCredentialsInternalAsync(cancellationToken);
     }
 
     public Task<OperationResult> RefreshAccessAsync(CancellationToken cancellationToken)
     {
         return Task.FromResult(OperationResult.Failed("Automatic token refresh is not implemented in the MVP."));
+    }
+
+    private async Task<OperationResult> ValidateCredentialsInternalAsync(CancellationToken cancellationToken)
+    {
+        var credentials = await GetCredentialsAsync(cancellationToken);
+        if (string.IsNullOrWhiteSpace(credentials.AccessToken) || string.IsNullOrWhiteSpace(credentials.MemberUrn))
+        {
+            return OperationResult.Failed("LinkedIn credentials are not configured.");
+        }
+
+        var client = _httpClientFactory.CreateClient("linkedin-auth");
+        client.DefaultRequestHeaders.Authorization = new AuthenticationHeaderValue("Bearer", credentials.AccessToken);
+        using var response = await client.GetAsync("https://api.linkedin.com/v2/userinfo", cancellationToken);
+        return response.IsSuccessStatusCode
+            ? OperationResult.Ok()
+            : OperationResult.Failed($"LinkedIn credential validation failed with status {(int)response.StatusCode}.");
+    }
+
+    private async Task<LinkedInCredentials> GetCredentialsAsync(CancellationToken cancellationToken)
+    {
+        var tokenSetting = await _settingsRepository.GetAsync(LinkedInSettingsKeys.AccessToken, cancellationToken);
+        var memberUrnSetting = await _settingsRepository.GetAsync(LinkedInSettingsKeys.MemberUrn, cancellationToken);
+
+        return new LinkedInCredentials
+        {
+            AccessToken = tokenSetting?.Value ?? _options.LinkedInAccessToken,
+            MemberUrn = memberUrnSetting?.Value ?? _options.LinkedInMemberUrn
+        };
+    }
+
+    private sealed class LinkedInCredentials
+    {
+        public string? AccessToken { get; init; }
+        public string? MemberUrn { get; init; }
     }
 }

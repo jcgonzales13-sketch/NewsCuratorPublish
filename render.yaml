@@ -1,0 +1,44 @@
+services:
+  - type: web
+    name: ai-news-curator
+    runtime: dotnet
+    buildCommand: dotnet publish src/AiNewsCurator.Api/AiNewsCurator.Api.csproj -c Release -o out/api
+    startCommand: ASPNETCORE_URLS=http://0.0.0.0:$PORT dotnet out/api/AiNewsCurator.Api.dll
+    healthCheckPath: /health
+    disk:
+      name: ainews-data
+      mountPath: /var/data/ainews
+      sizeGB: 1
+    envVars:
+      - key: ASPNETCORE_ENVIRONMENT
+        value: Production
+      - key: DATABASE_PATH
+        value: /var/data/ainews/ainews.db
+      - key: PUBLISH_MODE
+        value: Manual
+      - key: ENABLE_SCHEDULER
+        value: "true"
+      - key: RUN_HOUR_LOCAL
+        value: "08"
+      - key: RUN_MINUTE_LOCAL
+        value: "00"
+      - key: TIMEZONE
+        value: America/Sao_Paulo
+      - key: INTERNAL_API_KEY
+        sync: false
+      - key: AI_PROVIDER
+        value: Heuristic
+      - key: AI_API_KEY
+        sync: false
+      - key: AI_MODEL_NAME
+        value: local-heuristic
+      - key: LINKEDIN_CLIENT_ID
+        sync: false
+      - key: LINKEDIN_CLIENT_SECRET
+        sync: false
+      - key: LINKEDIN_REDIRECT_URI
+        sync: false
+      - key: LINKEDIN_ACCESS_TOKEN
+        sync: false
+      - key: LINKEDIN_MEMBER_URN
+        sync: false

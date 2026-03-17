@@ -12,6 +12,7 @@ public static class AppOptionEnvironmentMapper
         {
             ["DatabasePath"] = Environment.GetEnvironmentVariable("DATABASE_PATH"),
             ["PublishMode"] = Environment.GetEnvironmentVariable("PUBLISH_MODE"),
+            ["EnableScheduler"] = Environment.GetEnvironmentVariable("ENABLE_SCHEDULER"),
             ["RunHourLocal"] = Environment.GetEnvironmentVariable("RUN_HOUR_LOCAL"),
             ["RunMinuteLocal"] = Environment.GetEnvironmentVariable("RUN_MINUTE_LOCAL"),
             ["Timezone"] = Environment.GetEnvironmentVariable("TIMEZONE"),

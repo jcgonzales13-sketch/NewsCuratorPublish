@@ -15,6 +15,22 @@ public sealed class SourceRepository : ISourceRepository
         _connectionFactory = connectionFactory;
     }
 
+    public async Task<IReadOnlyList<Source>> GetAllAsync(CancellationToken cancellationToken)
+    {
+        await using var connection = await _connectionFactory.OpenAsync(cancellationToken);
+        await using var command = connection.CreateCommand();
+        command.CommandText = "SELECT * FROM Sources ORDER BY Priority DESC, Id ASC";
+
+        var items = new List<Source>();
+        await using var reader = await command.ExecuteReaderAsync(cancellationToken);
+        while (await reader.ReadAsync(cancellationToken))
+        {
+            items.Add(Map(reader));
+        }
+
+        return items;
+    }
+
     public async Task<IReadOnlyList<Source>> GetActiveAsync(CancellationToken cancellationToken)
     {
         await using var connection = await _connectionFactory.OpenAsync(cancellationToken);
@@ -29,6 +45,78 @@ public sealed class SourceRepository : ISourceRepository
         }
 
         return items;
+    }
+
+    public async Task<Source?> GetByIdAsync(long id, CancellationToken cancellationToken)
+    {
+        await using var connection = await _connectionFactory.OpenAsync(cancellationToken);
+        await using var command = connection.CreateCommand();
+        command.CommandText = "SELECT * FROM Sources WHERE Id = @Id";
+        command.Parameters.AddWithValue("@Id", id);
+        await using var reader = await command.ExecuteReaderAsync(cancellationToken);
+        return await reader.ReadAsync(cancellationToken) ? Map(reader) : null;
+    }
+
+    public async Task<long> InsertAsync(Source source, CancellationToken cancellationToken)
+    {
+        await using var connection = await _connectionFactory.OpenAsync(cancellationToken);
+        await using var command = connection.CreateCommand();
+        command.CommandText =
+            """
+            INSERT INTO Sources
+            (Name, Type, Url, Language, IsActive, Priority, MaxItemsPerRun, IncludeKeywordsJson, ExcludeKeywordsJson, TagsJson, CreatedAt, UpdatedAt)
+            VALUES
+            (@Name, @Type, @Url, @Language, @IsActive, @Priority, @MaxItemsPerRun, @IncludeKeywordsJson, @ExcludeKeywordsJson, @TagsJson, @CreatedAt, @UpdatedAt);
+            SELECT last_insert_rowid();
+            """;
+        command.Parameters.AddWithValue("@Name", source.Name);
+        command.Parameters.AddWithValue("@Type", (int)source.Type);
+        command.Parameters.AddWithValue("@Url", source.Url);
+        command.Parameters.AddWithValue("@Language", source.Language);
+        command.Parameters.AddWithValue("@IsActive", source.IsActive ? 1 : 0);
+        command.Parameters.AddWithValue("@Priority", source.Priority);
+        command.Parameters.AddWithValue("@MaxItemsPerRun", source.MaxItemsPerRun);
+        command.Parameters.AddWithValue("@IncludeKeywordsJson", source.IncludeKeywordsJson);
+        command.Parameters.AddWithValue("@ExcludeKeywordsJson", source.ExcludeKeywordsJson);
+        command.Parameters.AddWithValue("@TagsJson", source.TagsJson);
+        command.Parameters.AddWithValue("@CreatedAt", source.CreatedAt.ToString("O"));
+        command.Parameters.AddWithValue("@UpdatedAt", source.UpdatedAt.ToString("O"));
+        return Convert.ToInt64(await command.ExecuteScalarAsync(cancellationToken));
+    }
+
+    public async Task UpdateAsync(Source source, CancellationToken cancellationToken)
+    {
+        await using var connection = await _connectionFactory.OpenAsync(cancellationToken);
+        await using var command = connection.CreateCommand();
+        command.CommandText =
+            """
+            UPDATE Sources
+            SET Name = @Name,
+                Type = @Type,
+                Url = @Url,
+                Language = @Language,
+                IsActive = @IsActive,
+                Priority = @Priority,
+                MaxItemsPerRun = @MaxItemsPerRun,
+                IncludeKeywordsJson = @IncludeKeywordsJson,
+                ExcludeKeywordsJson = @ExcludeKeywordsJson,
+                TagsJson = @TagsJson,
+                UpdatedAt = @UpdatedAt
+            WHERE Id = @Id
+            """;
+        command.Parameters.AddWithValue("@Id", source.Id);
+        command.Parameters.AddWithValue("@Name", source.Name);
+        command.Parameters.AddWithValue("@Type", (int)source.Type);
+        command.Parameters.AddWithValue("@Url", source.Url);
+        command.Parameters.AddWithValue("@Language", source.Language);
+        command.Parameters.AddWithValue("@IsActive", source.IsActive ? 1 : 0);
+        command.Parameters.AddWithValue("@Priority", source.Priority);
+        command.Parameters.AddWithValue("@MaxItemsPerRun", source.MaxItemsPerRun);
+        command.Parameters.AddWithValue("@IncludeKeywordsJson", source.IncludeKeywordsJson);
+        command.Parameters.AddWithValue("@ExcludeKeywordsJson", source.ExcludeKeywordsJson);
+        command.Parameters.AddWithValue("@TagsJson", source.TagsJson);
+        command.Parameters.AddWithValue("@UpdatedAt", source.UpdatedAt.ToString("O"));
+        await command.ExecuteNonQueryAsync(cancellationToken);
     }
 
     public async Task SeedDefaultsAsync(CancellationToken cancellationToken)

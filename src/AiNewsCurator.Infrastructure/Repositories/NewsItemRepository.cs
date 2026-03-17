@@ -59,7 +59,7 @@ public sealed class NewsItemRepository : INewsItemRepository
         command.Parameters.AddWithValue("@ContentHash", contentHash);
         command.Parameters.AddWithValue("@PublishedAfter", DateTimeOffset.UtcNow.AddDays(-lookbackDays).ToString("O"));
 
-        return Convert.ToInt32(await command.ExecuteScalarAsync(cancellationToken)) > 0;
+        return Convert.ToInt32(await command.ExecuteScalarAsync(cancellationToken)) > 1;
     }
 
     public async Task<long> InsertAsync(NewsItem newsItem, CancellationToken cancellationToken)
@@ -116,6 +116,28 @@ public sealed class NewsItemRepository : INewsItemRepository
             """;
         command.Parameters.AddWithValue("@Status", (int)NewsItemStatus.Collected);
         command.Parameters.AddWithValue("@PublishedAfter", publishedAfter.ToString("O"));
+        command.Parameters.AddWithValue("@MaxItems", maxItems);
+
+        var items = new List<NewsItem>();
+        await using var reader = await command.ExecuteReaderAsync(cancellationToken);
+        while (await reader.ReadAsync(cancellationToken))
+        {
+            items.Add(Map(reader));
+        }
+
+        return items;
+    }
+
+    public async Task<IReadOnlyList<NewsItem>> GetRecentAsync(int maxItems, CancellationToken cancellationToken)
+    {
+        await using var connection = await _connectionFactory.OpenAsync(cancellationToken);
+        await using var command = connection.CreateCommand();
+        command.CommandText =
+            """
+            SELECT * FROM NewsItems
+            ORDER BY PublishedAt DESC, Id DESC
+            LIMIT @MaxItems
+            """;
         command.Parameters.AddWithValue("@MaxItems", maxItems);
 
         var items = new List<NewsItem>();

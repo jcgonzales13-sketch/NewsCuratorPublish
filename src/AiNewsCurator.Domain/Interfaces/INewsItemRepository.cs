@@ -12,4 +12,5 @@ public interface INewsItemRepository
     Task<long> InsertAsync(NewsItem newsItem, CancellationToken cancellationToken);
     Task UpdateStatusAsync(long id, NewsItemStatus status, CancellationToken cancellationToken);
     Task<IReadOnlyList<NewsItem>> GetCandidatesForCurationAsync(int maxItems, DateTimeOffset publishedAfter, CancellationToken cancellationToken);
+    Task<IReadOnlyList<NewsItem>> GetRecentAsync(int maxItems, CancellationToken cancellationToken);
 }

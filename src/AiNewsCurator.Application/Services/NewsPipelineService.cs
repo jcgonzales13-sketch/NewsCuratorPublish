@@ -179,77 +179,33 @@ public sealed class NewsPipelineService : INewsPipelineService
 
         foreach (var newsItem in candidates)
         {
-            if (await _newsItemRepository.GetPublishedByCanonicalUrlAsync(newsItem.CanonicalUrl, cancellationToken) is not null)
+            if (await CurateNewsItemAsync(newsItem, "auto-approval", cancellationToken))
             {
-                await _newsItemRepository.UpdateStatusAsync(newsItem.Id, NewsItemStatus.Duplicate, cancellationToken);
-                continue;
-            }
-
-            if (await _newsItemRepository.ExistsRecentSimilarAsync(newsItem.TitleHash, newsItem.ContentHash, _options.DuplicateLookbackDays, cancellationToken))
-            {
-                await _newsItemRepository.UpdateStatusAsync(newsItem.Id, NewsItemStatus.Duplicate, cancellationToken);
-                continue;
-            }
-
-            var evaluation = await _aiCurationService.EvaluateNewsAsync(newsItem, cancellationToken);
-            var curationResult = new CurationResult
-            {
-                NewsItemId = newsItem.Id,
-                RelevanceScore = evaluation.RelevanceScore,
-                ConfidenceScore = evaluation.ConfidenceScore,
-                Category = evaluation.Category,
-                WhyRelevant = evaluation.WhyRelevant,
-                ShouldPublish = evaluation.IsRelevant,
-                AiSummary = evaluation.Summary,
-                KeyPointsJson = JsonSerializer.Serialize(evaluation.KeyPoints),
-                PromptVersion = evaluation.PromptVersion,
-                ModelName = evaluation.ModelName,
-                PromptPayload = evaluation.PromptPayload,
-                ResponsePayload = evaluation.ResponsePayload,
-                CreatedAt = DateTimeOffset.UtcNow
-            };
-
-            await _curationResultRepository.InsertAsync(curationResult, cancellationToken);
-
-            if (!evaluation.IsRelevant || evaluation.RelevanceScore < _options.RelevanceThreshold)
-            {
-                await _newsItemRepository.UpdateStatusAsync(newsItem.Id, NewsItemStatus.Rejected, cancellationToken);
-                continue;
-            }
-
-            var generatedPost = await _aiCurationService.GenerateLinkedInPostAsync(newsItem, curationResult, cancellationToken);
-            var validation = await _aiCurationService.ValidatePostAsync(newsItem, generatedPost, cancellationToken);
-
-            var draftStatus = DraftStatus.PendingApproval;
-            if (GetPublishMode() == PublishMode.Automatic &&
-                validation.IsValid &&
-                evaluation.ConfidenceScore >= _options.ConfidenceThreshold)
-            {
-                draftStatus = DraftStatus.Approved;
-            }
-
-            var draft = new PostDraft
-            {
-                NewsItemId = newsItem.Id,
-                TitleSuggestion = newsItem.Title,
-                PostText = generatedPost,
-                Tone = "Professional",
-                Status = draftStatus,
-                ValidationErrorsJson = JsonSerializer.Serialize(validation.Errors),
-                CreatedAt = DateTimeOffset.UtcNow
-            };
-
-            var draftId = await _postDraftRepository.InsertAsync(draft, cancellationToken);
-            await _newsItemRepository.UpdateStatusAsync(newsItem.Id, NewsItemStatus.Selected, cancellationToken);
-            curatedCount++;
-
-            if (draftStatus == DraftStatus.Approved)
-            {
-                await PublishDraftAsync(draftId, "auto-approval", cancellationToken);
+                curatedCount++;
             }
         }
 
         return curatedCount;
+    }
+
+    public async Task<bool> ReprocessNewsItemAsync(long newsItemId, string requestedBy, CancellationToken cancellationToken)
+    {
+        var newsItem = await _newsItemRepository.GetByIdAsync(newsItemId, cancellationToken);
+        if (newsItem is null)
+        {
+            return false;
+        }
+
+        var existingDrafts = await _postDraftRepository.GetByNewsItemIdAsync(newsItemId, cancellationToken);
+        if (existingDrafts.Any(draft => draft.Status == DraftStatus.Published))
+        {
+            _logger.LogInformation("Skipping reprocess for NewsItemId={NewsItemId} because it was already published.", newsItemId);
+            return false;
+        }
+
+        await _newsItemRepository.UpdateStatusAsync(newsItemId, NewsItemStatus.Collected, cancellationToken);
+        newsItem.Status = NewsItemStatus.Collected;
+        return await CurateNewsItemAsync(newsItem, requestedBy, cancellationToken);
     }
 
     public async Task<bool> PublishDraftAsync(long draftId, string approvedBy, CancellationToken cancellationToken)
@@ -257,6 +213,28 @@ public sealed class NewsPipelineService : INewsPipelineService
         var draft = await _postDraftRepository.GetByIdAsync(draftId, cancellationToken);
         if (draft is null)
         {
+            return false;
+        }
+
+        var validation = await _linkedInPublisher.ValidateCredentialsAsync(cancellationToken);
+        if (!validation.Success)
+        {
+            var failedPublication = new Publication
+            {
+                PostDraftId = draft.Id,
+                Platform = "LinkedIn",
+                RequestPayload = string.Empty,
+                ResponsePayload = string.Empty,
+                Status = PublicationStatus.Failed,
+                ErrorMessage = validation.ErrorMessage
+            };
+
+            await _publicationRepository.InsertAsync(failedPublication, cancellationToken);
+            draft.Status = DraftStatus.Failed;
+            draft.ApprovedBy = approvedBy;
+            draft.ApprovedAt = DateTimeOffset.UtcNow;
+            await _postDraftRepository.UpdateAsync(draft, cancellationToken);
+            _logger.LogWarning("LinkedIn publish skipped for DraftId={DraftId}: {Reason}", draftId, validation.ErrorMessage);
             return false;
         }
 
@@ -316,5 +294,80 @@ public sealed class NewsPipelineService : INewsPipelineService
     private PublishMode GetPublishMode()
     {
         return Enum.TryParse<PublishMode>(_options.PublishMode, true, out var mode) ? mode : PublishMode.Manual;
+    }
+
+    private async Task<bool> CurateNewsItemAsync(NewsItem newsItem, string initiatedBy, CancellationToken cancellationToken)
+    {
+        if (await _newsItemRepository.GetPublishedByCanonicalUrlAsync(newsItem.CanonicalUrl, cancellationToken) is not null)
+        {
+            await _newsItemRepository.UpdateStatusAsync(newsItem.Id, NewsItemStatus.Duplicate, cancellationToken);
+            return false;
+        }
+
+        if (await _newsItemRepository.ExistsRecentSimilarAsync(newsItem.TitleHash, newsItem.ContentHash, _options.DuplicateLookbackDays, cancellationToken))
+        {
+            await _newsItemRepository.UpdateStatusAsync(newsItem.Id, NewsItemStatus.Duplicate, cancellationToken);
+            return false;
+        }
+
+        var evaluation = await _aiCurationService.EvaluateNewsAsync(newsItem, cancellationToken);
+        var curationResult = new CurationResult
+        {
+            NewsItemId = newsItem.Id,
+            RelevanceScore = evaluation.RelevanceScore,
+            ConfidenceScore = evaluation.ConfidenceScore,
+            Category = evaluation.Category,
+            WhyRelevant = evaluation.WhyRelevant,
+            ShouldPublish = evaluation.IsRelevant,
+            AiSummary = evaluation.Summary,
+            KeyPointsJson = JsonSerializer.Serialize(evaluation.KeyPoints),
+            PromptVersion = evaluation.PromptVersion,
+            ModelName = evaluation.ModelName,
+            PromptPayload = evaluation.PromptPayload,
+            ResponsePayload = evaluation.ResponsePayload,
+            CreatedAt = DateTimeOffset.UtcNow
+        };
+
+        await _curationResultRepository.InsertAsync(curationResult, cancellationToken);
+
+        if (!evaluation.IsRelevant || evaluation.RelevanceScore < _options.RelevanceThreshold)
+        {
+            await _newsItemRepository.UpdateStatusAsync(newsItem.Id, NewsItemStatus.Rejected, cancellationToken);
+            return false;
+        }
+
+        var generatedPost = string.IsNullOrWhiteSpace(evaluation.LinkedInDraft)
+            ? await _aiCurationService.GenerateLinkedInPostAsync(newsItem, curationResult, cancellationToken)
+            : evaluation.LinkedInDraft;
+        var validation = await _aiCurationService.ValidatePostAsync(newsItem, generatedPost, cancellationToken);
+
+        var draftStatus = DraftStatus.PendingApproval;
+        if (GetPublishMode() == PublishMode.Automatic &&
+            validation.IsValid &&
+            evaluation.ConfidenceScore >= _options.ConfidenceThreshold)
+        {
+            draftStatus = DraftStatus.Approved;
+        }
+
+        var draft = new PostDraft
+        {
+            NewsItemId = newsItem.Id,
+            TitleSuggestion = newsItem.Title,
+            PostText = generatedPost,
+            Tone = "Professional",
+            Status = draftStatus,
+            ValidationErrorsJson = JsonSerializer.Serialize(validation.Errors),
+            CreatedAt = DateTimeOffset.UtcNow
+        };
+
+        var draftId = await _postDraftRepository.InsertAsync(draft, cancellationToken);
+        await _newsItemRepository.UpdateStatusAsync(newsItem.Id, NewsItemStatus.Selected, cancellationToken);
+
+        if (draftStatus == DraftStatus.Approved)
+        {
+            await PublishDraftAsync(draftId, initiatedBy, cancellationToken);
+        }
+
+        return true;
     }
 }

@@ -16,6 +16,12 @@ public sealed class InternalApiKeyMiddleware
 
     public async Task InvokeAsync(HttpContext context)
     {
+        if (context.Request.Path.StartsWithSegments("/internal/auth/linkedin/callback", StringComparison.OrdinalIgnoreCase))
+        {
+            await _next(context);
+            return;
+        }
+
         if (!context.Request.Path.StartsWithSegments("/internal", StringComparison.OrdinalIgnoreCase))
         {
             await _next(context);

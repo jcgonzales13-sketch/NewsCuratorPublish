@@ -1,9 +1,9 @@
 using AiNewsCurator.Application;
 using AiNewsCurator.Application.Configuration;
+using AiNewsCurator.Application.HostedServices;
 using AiNewsCurator.Application.Interfaces;
 using AiNewsCurator.Domain.Interfaces;
 using AiNewsCurator.Infrastructure;
-using AiNewsCurator.Worker.HostedServices;
 
 var builder = Host.CreateApplicationBuilder(args);
 builder.Configuration.AddMappedEnvironmentVariables();

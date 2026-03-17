@@ -1,9 +1,12 @@
 using AiNewsCurator.Application.DTOs;
 using AiNewsCurator.Application.Interfaces;
 using AiNewsCurator.Domain.Enums;
+using Microsoft.Extensions.DependencyInjection;
+using Microsoft.Extensions.Hosting;
+using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Options;
 
-namespace AiNewsCurator.Worker.HostedServices;
+namespace AiNewsCurator.Application.HostedServices;
 
 public sealed class DailySchedulerService : BackgroundService
 {
@@ -34,7 +37,7 @@ public sealed class DailySchedulerService : BackgroundService
                 await pipeline.RunDailyAsync(new TriggerContext
                 {
                     TriggerType = TriggerType.Scheduled,
-                    InitiatedBy = "worker"
+                    InitiatedBy = "scheduler"
                 }, stoppingToken);
             }
             catch (Exception ex)

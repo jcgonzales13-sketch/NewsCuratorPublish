@@ -85,7 +85,7 @@ public sealed class HeuristicAiCurationService : IAiCurationService
         var baseSummary = newsItem.RawSummary ?? newsItem.Title;
         return
             $"Uma noticia recente sobre IA chamou minha atencao: {newsItem.Title}. " +
-            $"Em termos práticos, o ponto central e este: {baseSummary}. " +
+            $"Em termos praticos, o ponto central e este: {baseSummary}. " +
             "O que torna esse movimento relevante para empresas e profissionais e a combinacao entre impacto de negocio, velocidade de adocao e necessidade de leitura critica. " +
             "Vale observar como esse tema evolui nas proximas semanas e o que ele sinaliza para produto, operacao e estrategia.";
     }

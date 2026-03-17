@@ -25,7 +25,10 @@ public static class DependencyInjection
         services.AddScoped<IExecutionRunRepository, ExecutionRunRepository>();
         services.AddScoped<ISettingsRepository, SettingsRepository>();
 
-        services.AddScoped<IAiCurationService, HeuristicAiCurationService>();
+        services.AddScoped<HeuristicAiCurationService>();
+        services.AddScoped<OpenAiResponsesAiCurationService>();
+        services.AddScoped<IAiCurationService, ResilientAiCurationService>();
+        services.AddScoped<ILinkedInAuthService, LinkedInAuthService>();
         services.AddScoped<ILinkedInPublisher, LinkedInPublisher>();
         services.AddScoped<INewsCollector, RssNewsCollector>();
 
@@ -40,6 +43,18 @@ public static class DependencyInjection
             client.Timeout = TimeSpan.FromSeconds(20);
             client.DefaultRequestHeaders.Add("LinkedIn-Version", "202401");
             client.DefaultRequestHeaders.Add("X-Restli-Protocol-Version", "2.0.0");
+        });
+
+        services.AddHttpClient("linkedin-auth", client =>
+        {
+            client.BaseAddress = new Uri("https://www.linkedin.com");
+            client.Timeout = TimeSpan.FromSeconds(20);
+        });
+
+        services.AddHttpClient("openai", client =>
+        {
+            client.BaseAddress = new Uri(configuration["AiBaseUrl"] ?? "https://api.openai.com");
+            client.Timeout = TimeSpan.FromSeconds(45);
         });
 
         return services;

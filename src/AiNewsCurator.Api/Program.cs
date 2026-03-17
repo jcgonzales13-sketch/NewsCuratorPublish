@@ -1,6 +1,7 @@
 using AiNewsCurator.Api.Middleware;
 using AiNewsCurator.Application;
 using AiNewsCurator.Application.Configuration;
+using AiNewsCurator.Application.HostedServices;
 using AiNewsCurator.Application.Interfaces;
 using AiNewsCurator.Domain.Interfaces;
 using AiNewsCurator.Infrastructure;
@@ -14,6 +15,11 @@ builder.Services.AddInfrastructure(builder.Configuration);
 builder.Services.AddControllers();
 builder.Services.AddEndpointsApiExplorer();
 builder.Services.AddSwaggerGen();
+
+if (builder.Configuration.GetValue<bool>("EnableScheduler"))
+{
+    builder.Services.AddHostedService<DailySchedulerService>();
+}
 
 var app = builder.Build();
 

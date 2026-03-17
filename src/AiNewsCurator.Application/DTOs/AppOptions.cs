@@ -4,6 +4,7 @@ public sealed class AppOptions
 {
     public string DatabasePath { get; set; } = "data/ainews.db";
     public string PublishMode { get; set; } = "Manual";
+    public bool EnableScheduler { get; set; }
     public int RunHourLocal { get; set; } = 8;
     public int RunMinuteLocal { get; set; } = 0;
     public string Timezone { get; set; } = "America/Sao_Paulo";

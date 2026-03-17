@@ -57,6 +57,17 @@ Todos exigem `X-API-Key`.
 - `POST /internal/run/curate`
 - `POST /internal/run/publish/{draftId}`
 - `GET /internal/drafts`
+- `GET /internal/news`
+- `GET /internal/news/{id}`
+- `POST /internal/news/{id}/reprocess`
+- `GET /internal/sources`
+- `POST /internal/sources`
+- `PUT /internal/sources/{id}`
+- `POST /internal/sources/{id}/deactivate`
+- `GET /internal/auth/linkedin/status`
+- `POST /internal/auth/linkedin/start`
+- `POST /internal/auth/linkedin/validate`
+- `GET /internal/auth/linkedin/callback`
 - `POST /internal/drafts/{id}/approve`
 - `POST /internal/drafts/{id}/reject`
 - `GET /internal/runs`
@@ -67,21 +78,35 @@ Exemplo:
 curl -X POST http://localhost:5138/internal/run/daily -H "X-API-Key: changeme"
 ```
 
+Para iniciar a conexao OAuth do LinkedIn em ambiente local:
+
+```bash
+curl -X POST http://localhost:5138/internal/auth/linkedin/start -H "X-API-Key: changeme"
+```
+
+Use a URL retornada no navegador. O callback esperado para desenvolvimento local e `http://localhost:5138/internal/auth/linkedin/callback`.
+
 ## Deploy no Render
 
-Recomendado:
+O repositório agora inclui [render.yaml](/c:/PublishNews/render.yaml) com o desenho recomendado para SQLite no MVP: um unico `Web Service` hospedando a API e o scheduler interno no mesmo processo.
 
-1. Criar um `Web Service` para `AiNewsCurator.Api`.
-2. Criar um `Background Worker` para `AiNewsCurator.Worker`.
-3. Anexar persistent disk ao servico que acessa o SQLite.
-4. Configurar `DatabasePath=/var/data/ainews/ainews.db`.
-5. Definir todas as variaveis sensiveis no painel do Render.
+Motivo: no Render, o persistent disk e por servico. Com SQLite, separar API e worker em servicos diferentes introduz risco de cada processo enxergar um filesystem diferente.
+
+Passos:
+
+1. Criar o servico a partir do blueprint `render.yaml`.
+2. Manter `ENABLE_SCHEDULER=true` no servico web para a rotina diaria rodar internamente.
+3. Configurar segredos como `INTERNAL_API_KEY`, `AI_API_KEY`, `LINKEDIN_ACCESS_TOKEN` e `LINKEDIN_MEMBER_URN`.
+4. Confirmar o mount do disco em `/var/data/ainews`.
+5. Validar o healthcheck em `/health`.
 
 Nao use cron job separado do Render acessando SQLite local, porque o persistent disk nao e compartilhado da forma necessaria para esse desenho.
 
+O projeto `AiNewsCurator.Worker` continua util para outros ambientes, mas no Render com SQLite a topologia recomendada e o host web unico.
+
 ## Limitacoes atuais
 
-- Curadoria por IA usa heuristica local por padrao, sem provider real conectado.
-- Publicacao no LinkedIn assume token de acesso preexistente; refresh token nao foi implementado.
+- Curadoria por IA usa heuristica local por padrao, mas agora pode usar `AI_PROVIDER=OpenAI` com `AI_API_KEY`.
+- O fluxo OAuth local do LinkedIn agora esta implementado, mas refresh token automatico ainda nao foi implementado.
 - Similaridade semantica avancada ainda nao foi adicionada.
 - O projeto de integracao existe como base, mas os testes de integracao completos ainda ficam para a proxima iteracao.
