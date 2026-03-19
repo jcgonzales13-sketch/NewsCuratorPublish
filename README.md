@@ -33,6 +33,8 @@ Use o arquivo `.env.example` como referencia. As principais variaveis:
 
 O projeto ja aceita diretamente os nomes da spec em ambiente, como `DATABASE_PATH`, `PUBLISH_MODE`, `INTERNAL_API_KEY`, `LINKEDIN_ACCESS_TOKEN` e `AI_PROVIDER`.
 
+Para execucao local com segredos fora do projeto, copie [.env.local.example](/c:/PublishNews/.env.local.example) para `.env.local`, preencha as chaves e use [run-api-local.sh](/c:/PublishNews/scripts/run-api-local.sh).
+
 ## Execucao local
 
 ```bash

@@ -4,3 +4,6 @@ obj/
 TestResults/
 data/
 NewsCuratorPublish/
+.env.local
+.env.local.*
+auth-url.txt

@@ -1,0 +1,38 @@
+{
+  "$schema": "http://json.schemastore.org/launchsettings.json",
+  "profiles": {
+    "AiNewsCurator.Api": {
+      "commandName": "Project",
+      "dotnetRunMessages": true,
+      "launchBrowser": true,
+      "launchUrl": "swagger",
+      "applicationUrl": "http://localhost:5138",
+      "environmentVariables": {
+        "ASPNETCORE_ENVIRONMENT": "Development",
+        "DATABASE_PATH": "data/ainews.db",
+        "PUBLISH_MODE": "Manual",
+        "ENABLE_SCHEDULER": "false",
+        "RUN_HOUR_LOCAL": "08",
+        "RUN_MINUTE_LOCAL": "00",
+        "TIMEZONE": "America/Sao_Paulo",
+        "INTERNAL_API_KEY": "changeme",
+        "AI_PROVIDER": "Heuristic",
+        "AI_API_KEY": "",
+        "AI_MODEL_NAME": "local-heuristic",
+        "AI_BASE_URL": "",
+        "MAX_NEWS_PER_RUN": "50",
+        "MAX_CANDIDATES_FOR_AI": "10",
+        "RELEVANCE_THRESHOLD": "0.75",
+        "CONFIDENCE_THRESHOLD": "0.80",
+        "DUPLICATE_LOOKBACK_DAYS": "14",
+        "POST_LOOKBACK_DAYS": "15",
+        "NEWS_WINDOW_HOURS": "48",
+        "LINKEDIN_CLIENT_ID": "77hj3yc1ucbwpk",
+        "LINKEDIN_CLIENT_SECRET": "",
+        "LINKEDIN_REDIRECT_URI": "http://localhost:5138/internal/auth/linkedin/callback",
+        "LINKEDIN_ACCESS_TOKEN": "",
+        "LINKEDIN_MEMBER_URN": ""
+      }
+    }
+  }
+}
