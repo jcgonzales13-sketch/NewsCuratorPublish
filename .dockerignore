@@ -1,0 +1,11 @@
+.git
+.gitignore
+.env.local
+.env.local.*
+.vs
+.vscode
+**/bin
+**/obj
+**/TestResults
+auth-url.txt
+src/AiNewsCurator.Api/data

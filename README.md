@@ -114,6 +114,27 @@ Nao use cron job separado do Render acessando SQLite local, porque o persistent 
 
 O projeto `AiNewsCurator.Worker` continua util para outros ambientes, mas no Render com SQLite a topologia recomendada e o host web unico.
 
+## Docker
+
+O repositorio agora inclui [Dockerfile](/c:/PublishNews/Dockerfile) e [.dockerignore](/c:/PublishNews/.dockerignore) para publicar a `Api` em container.
+
+Build local:
+
+```bash
+docker build -t ai-news-curator .
+```
+
+Execucao local:
+
+```bash
+docker run --rm -p 8080:8080 \
+  -e INTERNAL_API_KEY=changeme \
+  -e DATABASE_PATH=/var/data/ainews/ainews.db \
+  ai-news-curator
+```
+
+No Render, basta usar o `Dockerfile` da raiz. O app escuta na porta `8080` dentro do container e o healthcheck continua em `/health`.
+
 ## Limitacoes atuais
 
 - Curadoria por IA usa heuristica local por padrao, mas agora pode usar `AI_PROVIDER=OpenAI` com `AI_API_KEY`.
