@@ -31,6 +31,7 @@ public static class DependencyInjection
         services.AddScoped<ILinkedInAuthService, LinkedInAuthService>();
         services.AddScoped<ILinkedInPublisher, LinkedInPublisher>();
         services.AddScoped<INewsCollector, RssNewsCollector>();
+        services.AddScoped<INewsImageEnrichmentService, NewsImageEnrichmentService>();
 
         services.AddHttpClient("rss", client =>
         {

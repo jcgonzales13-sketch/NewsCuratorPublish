@@ -35,4 +35,31 @@ public sealed class PublicationRepository : IPublicationRepository
         command.Parameters.AddWithValue("@ErrorMessage", (object?)publication.ErrorMessage ?? DBNull.Value);
         return Convert.ToInt64(await command.ExecuteScalarAsync(cancellationToken));
     }
+
+    public async Task<Publication?> GetLatestByDraftIdAsync(long postDraftId, CancellationToken cancellationToken)
+    {
+        await using var connection = await _connectionFactory.OpenAsync(cancellationToken);
+        await using var command = connection.CreateCommand();
+        command.CommandText = "SELECT * FROM Publications WHERE PostDraftId = @PostDraftId ORDER BY Id DESC LIMIT 1";
+        command.Parameters.AddWithValue("@PostDraftId", postDraftId);
+
+        await using var reader = await command.ExecuteReaderAsync(cancellationToken);
+        if (!await reader.ReadAsync(cancellationToken))
+        {
+            return null;
+        }
+
+        return new Publication
+        {
+            Id = reader.GetInt64(reader.GetOrdinal("Id")),
+            PostDraftId = reader.GetInt64(reader.GetOrdinal("PostDraftId")),
+            Platform = reader.GetString(reader.GetOrdinal("Platform")),
+            PlatformPostId = reader.IsDBNull(reader.GetOrdinal("PlatformPostId")) ? null : reader.GetString(reader.GetOrdinal("PlatformPostId")),
+            PublishedAt = reader.IsDBNull(reader.GetOrdinal("PublishedAt")) ? null : DateTimeOffset.Parse(reader.GetString(reader.GetOrdinal("PublishedAt"))),
+            RequestPayload = reader.GetString(reader.GetOrdinal("RequestPayload")),
+            ResponsePayload = reader.GetString(reader.GetOrdinal("ResponsePayload")),
+            Status = (AiNewsCurator.Domain.Enums.PublicationStatus)reader.GetInt32(reader.GetOrdinal("Status")),
+            ErrorMessage = reader.IsDBNull(reader.GetOrdinal("ErrorMessage")) ? null : reader.GetString(reader.GetOrdinal("ErrorMessage"))
+        };
+    }
 }

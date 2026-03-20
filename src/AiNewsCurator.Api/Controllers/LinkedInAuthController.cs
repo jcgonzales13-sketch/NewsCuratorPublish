@@ -57,15 +57,15 @@ public sealed class LinkedInAuthController : ControllerBase
 
     private static string BuildHtml(bool success, string message, string? memberName, string? memberEmail)
     {
-        var title = success ? "LinkedIn conectado" : "Falha na conexao LinkedIn";
+        var title = success ? "LinkedIn connected" : "LinkedIn connection failed";
         var details = success
-            ? $"<p><strong>Nome:</strong> {System.Net.WebUtility.HtmlEncode(memberName ?? "-")}</p><p><strong>Email:</strong> {System.Net.WebUtility.HtmlEncode(memberEmail ?? "-")}</p>"
+            ? $"<p><strong>Name:</strong> {System.Net.WebUtility.HtmlEncode(memberName ?? "-")}</p><p><strong>Email:</strong> {System.Net.WebUtility.HtmlEncode(memberEmail ?? "-")}</p>"
             : string.Empty;
 
         return
             $"""
             <!doctype html>
-            <html lang="pt-BR">
+            <html lang="en">
             <head>
               <meta charset="utf-8" />
               <meta name="viewport" content="width=device-width, initial-scale=1" />
@@ -75,7 +75,7 @@ public sealed class LinkedInAuthController : ControllerBase
               <h1>{title}</h1>
               <p>{System.Net.WebUtility.HtmlEncode(message)}</p>
               {details}
-              <p>Voce pode fechar esta janela e voltar para a aplicacao.</p>
+              <p>You can close this window and return to the application.</p>
             </body>
             </html>
             """;

@@ -10,6 +10,8 @@ public sealed class NewsItem
     public string Title { get; set; } = string.Empty;
     public string Url { get; set; } = string.Empty;
     public string CanonicalUrl { get; set; } = string.Empty;
+    public string? ImageUrl { get; set; }
+    public string? ImageOrigin { get; set; }
     public string? Author { get; set; }
     public DateTimeOffset PublishedAt { get; set; }
     public string Language { get; set; } = "en";

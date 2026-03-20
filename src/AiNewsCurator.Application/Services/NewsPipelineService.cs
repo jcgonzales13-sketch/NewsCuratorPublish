@@ -150,6 +150,8 @@ public sealed class NewsPipelineService : INewsPipelineService
                     Title = item.Title,
                     Url = item.Url,
                     CanonicalUrl = canonicalUrl,
+                    ImageUrl = item.ImageUrl,
+                    ImageOrigin = item.ImageOrigin,
                     Author = item.Author,
                     PublishedAt = item.PublishedAt,
                     Language = item.Language,
@@ -206,6 +208,29 @@ public sealed class NewsPipelineService : INewsPipelineService
         await _newsItemRepository.UpdateStatusAsync(newsItemId, NewsItemStatus.Collected, cancellationToken);
         newsItem.Status = NewsItemStatus.Collected;
         return await CurateNewsItemAsync(newsItem, requestedBy, cancellationToken);
+    }
+
+    public async Task<bool> CreateManualDraftAsync(long newsItemId, string requestedBy, CancellationToken cancellationToken)
+    {
+        var newsItem = await _newsItemRepository.GetByIdAsync(newsItemId, cancellationToken);
+        if (newsItem is null)
+        {
+            return false;
+        }
+
+        var existingDrafts = await _postDraftRepository.GetByNewsItemIdAsync(newsItemId, cancellationToken);
+        if (existingDrafts.Any(draft => draft.Status == DraftStatus.Published))
+        {
+            _logger.LogInformation("Skipping manual draft for NewsItemId={NewsItemId} because it was already published.", newsItemId);
+            return false;
+        }
+
+        var evaluation = await _aiCurationService.EvaluateNewsAsync(newsItem, cancellationToken);
+        var curationResult = await CreateAndPersistCurationResultAsync(newsItem, evaluation, cancellationToken);
+        var draftId = await CreateDraftAsync(newsItem, curationResult, evaluation.LinkedInDraft, requestedBy, forcePendingApproval: true, cancellationToken);
+
+        _logger.LogInformation("Created manual draft {DraftId} for NewsItemId={NewsItemId}", draftId, newsItemId);
+        return draftId > 0;
     }
 
     public async Task<bool> PublishDraftAsync(long draftId, string approvedBy, CancellationToken cancellationToken)
@@ -311,6 +336,20 @@ public sealed class NewsPipelineService : INewsPipelineService
         }
 
         var evaluation = await _aiCurationService.EvaluateNewsAsync(newsItem, cancellationToken);
+        var curationResult = await CreateAndPersistCurationResultAsync(newsItem, evaluation, cancellationToken);
+
+        if (!evaluation.IsRelevant || evaluation.RelevanceScore < _options.RelevanceThreshold)
+        {
+            await _newsItemRepository.UpdateStatusAsync(newsItem.Id, NewsItemStatus.Rejected, cancellationToken);
+            return false;
+        }
+
+        await CreateDraftAsync(newsItem, curationResult, evaluation.LinkedInDraft, initiatedBy, forcePendingApproval: false, cancellationToken);
+        return true;
+    }
+
+    private async Task<CurationResult> CreateAndPersistCurationResultAsync(NewsItem newsItem, AiEvaluationResult evaluation, CancellationToken cancellationToken)
+    {
         var curationResult = new CurationResult
         {
             NewsItemId = newsItem.Id,
@@ -329,22 +368,29 @@ public sealed class NewsPipelineService : INewsPipelineService
         };
 
         await _curationResultRepository.InsertAsync(curationResult, cancellationToken);
+        return curationResult;
+    }
 
-        if (!evaluation.IsRelevant || evaluation.RelevanceScore < _options.RelevanceThreshold)
-        {
-            await _newsItemRepository.UpdateStatusAsync(newsItem.Id, NewsItemStatus.Rejected, cancellationToken);
-            return false;
-        }
-
-        var generatedPost = string.IsNullOrWhiteSpace(evaluation.LinkedInDraft)
+    private async Task<long> CreateDraftAsync(
+        NewsItem newsItem,
+        CurationResult curationResult,
+        string? providedDraft,
+        string initiatedBy,
+        bool forcePendingApproval,
+        CancellationToken cancellationToken)
+    {
+        var generatedPost = string.IsNullOrWhiteSpace(providedDraft)
             ? await _aiCurationService.GenerateLinkedInPostAsync(newsItem, curationResult, cancellationToken)
-            : evaluation.LinkedInDraft;
+            : providedDraft;
+
+        generatedPost = await AppendAttributionFooterAsync(newsItem, generatedPost, cancellationToken);
         var validation = await _aiCurationService.ValidatePostAsync(newsItem, generatedPost, cancellationToken);
 
         var draftStatus = DraftStatus.PendingApproval;
-        if (GetPublishMode() == PublishMode.Automatic &&
+        if (!forcePendingApproval &&
+            GetPublishMode() == PublishMode.Automatic &&
             validation.IsValid &&
-            evaluation.ConfidenceScore >= _options.ConfidenceThreshold)
+            curationResult.ConfidenceScore >= _options.ConfidenceThreshold)
         {
             draftStatus = DraftStatus.Approved;
         }
@@ -368,6 +414,19 @@ public sealed class NewsPipelineService : INewsPipelineService
             await PublishDraftAsync(draftId, initiatedBy, cancellationToken);
         }
 
-        return true;
+        return draftId;
+    }
+
+    private async Task<string> AppendAttributionFooterAsync(NewsItem newsItem, string generatedPost, CancellationToken cancellationToken)
+    {
+        var source = await _sourceRepository.GetByIdAsync(newsItem.SourceId, cancellationToken);
+        var sourceName = source?.Name ?? "original source";
+        var footer =
+            $"{Environment.NewLine}{Environment.NewLine}Source: {sourceName} ({newsItem.CanonicalUrl})" +
+            $"{Environment.NewLine}Curated by: AI News Curator";
+
+        return generatedPost.Contains("Source:", StringComparison.OrdinalIgnoreCase)
+            ? generatedPost
+            : generatedPost.TrimEnd() + footer;
     }
 }

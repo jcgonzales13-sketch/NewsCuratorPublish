@@ -6,4 +6,5 @@ public sealed class OperationsNewsItemViewModel
 {
     public required NewsItem NewsItem { get; init; }
     public CurationResult? LatestCuration { get; init; }
+    public string? SourceName { get; init; }
 }

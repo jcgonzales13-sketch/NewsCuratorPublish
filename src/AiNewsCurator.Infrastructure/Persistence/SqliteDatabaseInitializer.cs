@@ -43,6 +43,8 @@ public sealed class SqliteDatabaseInitializer : IDatabaseInitializer
                 Title TEXT NOT NULL,
                 Url TEXT NOT NULL,
                 CanonicalUrl TEXT NOT NULL,
+                ImageUrl TEXT NULL,
+                ImageOrigin TEXT NULL,
                 Author TEXT NULL,
                 PublishedAt TEXT NOT NULL,
                 Language TEXT NOT NULL,
@@ -127,6 +129,41 @@ public sealed class SqliteDatabaseInitializer : IDatabaseInitializer
             """;
 
         await command.ExecuteNonQueryAsync(cancellationToken);
+        await EnsureColumnExistsAsync(connection, "NewsItems", "ImageUrl", "TEXT NULL", cancellationToken);
+        await EnsureColumnExistsAsync(connection, "NewsItems", "ImageOrigin", "TEXT NULL", cancellationToken);
         _logger.LogInformation("SQLite schema is ready.");
+    }
+
+    private static async Task EnsureColumnExistsAsync(
+        Microsoft.Data.Sqlite.SqliteConnection connection,
+        string tableName,
+        string columnName,
+        string columnDefinition,
+        CancellationToken cancellationToken)
+    {
+        await using var pragma = connection.CreateCommand();
+        pragma.CommandText = $"PRAGMA table_info({tableName})";
+
+        var exists = false;
+        await using (var reader = await pragma.ExecuteReaderAsync(cancellationToken))
+        {
+            while (await reader.ReadAsync(cancellationToken))
+            {
+                if (string.Equals(reader.GetString(reader.GetOrdinal("name")), columnName, StringComparison.OrdinalIgnoreCase))
+                {
+                    exists = true;
+                    break;
+                }
+            }
+        }
+
+        if (exists)
+        {
+            return;
+        }
+
+        await using var alter = connection.CreateCommand();
+        alter.CommandText = $"ALTER TABLE {tableName} ADD COLUMN {columnName} {columnDefinition}";
+        await alter.ExecuteNonQueryAsync(cancellationToken);
     }
 }

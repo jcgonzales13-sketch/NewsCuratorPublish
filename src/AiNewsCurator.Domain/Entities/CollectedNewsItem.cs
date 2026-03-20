@@ -6,6 +6,8 @@ public sealed class CollectedNewsItem
     public string Title { get; init; } = string.Empty;
     public string Url { get; init; } = string.Empty;
     public string CanonicalUrl { get; init; } = string.Empty;
+    public string? ImageUrl { get; init; }
+    public string? ImageOrigin { get; init; }
     public string? Author { get; init; }
     public DateTimeOffset PublishedAt { get; init; }
     public string Language { get; init; } = "en";

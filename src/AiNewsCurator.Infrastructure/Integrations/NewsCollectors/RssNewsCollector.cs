@@ -1,4 +1,6 @@
 using System.ServiceModel.Syndication;
+using System.Text.RegularExpressions;
+using System.Net;
 using System.Xml;
 using AiNewsCurator.Domain.Entities;
 using AiNewsCurator.Domain.Enums;
@@ -40,14 +42,18 @@ public sealed class RssNewsCollector : INewsCollector
             .Select(item =>
             {
                 var link = item.Links.FirstOrDefault()?.Uri?.ToString() ?? string.Empty;
-                var summary = item.Summary?.Text ?? item.Title?.Text ?? string.Empty;
+                var title = DecodeHtml(item.Title?.Text ?? string.Empty);
+                var summary = DecodeHtml(item.Summary?.Text ?? item.Title?.Text ?? string.Empty);
+                var imageUrl = TryGetImageUrl(item, summary);
 
                 return new CollectedNewsItem
                 {
                     ExternalId = item.Id,
-                    Title = item.Title?.Text ?? string.Empty,
+                    Title = title,
                     Url = link,
                     CanonicalUrl = UrlNormalization.Normalize(link),
+                    ImageUrl = imageUrl,
+                    ImageOrigin = string.IsNullOrWhiteSpace(imageUrl) ? null : "RSS",
                     Author = item.Authors.FirstOrDefault()?.Name,
                     PublishedAt = item.PublishDate != DateTimeOffset.MinValue ? item.PublishDate : DateTimeOffset.UtcNow,
                     Language = source.Language,
@@ -60,5 +66,31 @@ public sealed class RssNewsCollector : INewsCollector
 
         _logger.LogInformation("Collected {Count} RSS items from source {SourceName}", items.Count, source.Name);
         return items;
+    }
+
+    private static string DecodeHtml(string value)
+    {
+        return WebUtility.HtmlDecode(value).Trim();
+    }
+
+    private static string? TryGetImageUrl(SyndicationItem item, string? summary)
+    {
+        var enclosure = item.Links.FirstOrDefault(link =>
+            string.Equals(link.RelationshipType, "enclosure", StringComparison.OrdinalIgnoreCase) &&
+            link.Uri is not null &&
+            (link.MediaType?.StartsWith("image/", StringComparison.OrdinalIgnoreCase) ?? false));
+
+        if (enclosure?.Uri is not null)
+        {
+            return enclosure.Uri.ToString();
+        }
+
+        if (string.IsNullOrWhiteSpace(summary))
+        {
+            return null;
+        }
+
+        var match = Regex.Match(summary, "<img[^>]+src=[\"'](?<src>[^\"']+)[\"']", RegexOptions.IgnoreCase);
+        return match.Success ? match.Groups["src"].Value : null;
     }
 }

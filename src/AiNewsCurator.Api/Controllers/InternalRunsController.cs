@@ -19,6 +19,7 @@ public sealed class InternalRunsController : ControllerBase
     private readonly INewsItemRepository _newsItemRepository;
     private readonly ICurationResultRepository _curationResultRepository;
     private readonly ISourceRepository _sourceRepository;
+    private readonly INewsImageEnrichmentService _newsImageEnrichmentService;
 
     public InternalRunsController(
         INewsPipelineService pipelineService,
@@ -26,7 +27,8 @@ public sealed class InternalRunsController : ControllerBase
         IExecutionRunRepository executionRunRepository,
         INewsItemRepository newsItemRepository,
         ICurationResultRepository curationResultRepository,
-        ISourceRepository sourceRepository)
+        ISourceRepository sourceRepository,
+        INewsImageEnrichmentService newsImageEnrichmentService)
     {
         _pipelineService = pipelineService;
         _postDraftRepository = postDraftRepository;
@@ -34,6 +36,7 @@ public sealed class InternalRunsController : ControllerBase
         _newsItemRepository = newsItemRepository;
         _curationResultRepository = curationResultRepository;
         _sourceRepository = sourceRepository;
+        _newsImageEnrichmentService = newsImageEnrichmentService;
     }
 
     [HttpPost("run/daily")]
@@ -72,11 +75,26 @@ public sealed class InternalRunsController : ControllerBase
         return Ok(new { itemsCurated = count });
     }
 
+    [HttpPost("run/normalize-news")]
+    public async Task<IActionResult> NormalizeNews(CancellationToken cancellationToken)
+    {
+        var itemsNormalized = await _newsItemRepository.NormalizeStoredContentAsync(cancellationToken);
+        var imagesEnriched = await _newsImageEnrichmentService.BackfillMissingImagesAsync(cancellationToken);
+        return Ok(new { itemsNormalized, imagesEnriched });
+    }
+
     [HttpPost("news/{id:long}/reprocess")]
     public async Task<IActionResult> ReprocessNews(long id, CancellationToken cancellationToken)
     {
         var success = await _pipelineService.ReprocessNewsItemAsync(id, "manual-reprocess", cancellationToken);
         return success ? Ok(new { reprocessed = true }) : BadRequest(new { reprocessed = false });
+    }
+
+    [HttpPost("news/{id:long}/draft")]
+    public async Task<IActionResult> CreateManualDraft(long id, CancellationToken cancellationToken)
+    {
+        var success = await _pipelineService.CreateManualDraftAsync(id, "manual-draft", cancellationToken);
+        return success ? Ok(new { draftCreated = true }) : BadRequest(new { draftCreated = false });
     }
 
     [HttpPost("run/publish/{draftId:long}")]

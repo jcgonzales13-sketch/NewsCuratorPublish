@@ -11,24 +11,25 @@ internal static class OpenAiPromptFactory
             new
             {
                 role = "system",
-                content = "You are an AI news curator for LinkedIn. Always respond in Brazilian Portuguese and never invent facts."
+                content = "You are an AI news curator for LinkedIn. Always respond in English, maintain a professional tone, and never invent facts."
             },
             new
             {
                 role = "user",
                 content =
-                    $"Avalie a noticia a seguir e gere um JSON estruturado.\n" +
-                    $"Titulo: {newsItem.Title}\n" +
-                    $"URL canonica: {newsItem.CanonicalUrl}\n" +
-                    $"Resumo bruto: {newsItem.RawSummary}\n" +
-                    $"Conteudo bruto: {newsItem.RawContent}\n\n" +
-                    "Regras:\n" +
-                    "- Trabalhe em portugues do Brasil.\n" +
-                    "- Nao invente fatos.\n" +
-                    "- Seja factual e profissional.\n" +
-                    "- Classifique relevancia, confianca, categoria e pontos principais.\n" +
-                    "- Escreva tambem um rascunho de post para LinkedIn com contexto, impacto e CTA leve.\n" +
-                    "- Se a noticia nao merecer publicacao, ainda assim devolva o JSON completo."
+                    $"Evaluate the following news item and produce structured JSON.\n" +
+                    $"Title: {newsItem.Title}\n" +
+                    $"Canonical URL: {newsItem.CanonicalUrl}\n" +
+                    $"Raw summary: {newsItem.RawSummary}\n" +
+                    $"Raw content: {newsItem.RawContent}\n\n" +
+                    "Rules:\n" +
+                    "- Write in English.\n" +
+                    "- Do not invent facts.\n" +
+                    "- Be factual, clear, and professional.\n" +
+                    "- Assess relevance, confidence, category, and key points.\n" +
+                    "- Also produce a polished LinkedIn draft with context, business impact, and a light CTA.\n" +
+                    "- Avoid clickbait, hype, and exaggerated claims.\n" +
+                    "- Even if the story should not be published, still return the full JSON."
             }
         ];
     }

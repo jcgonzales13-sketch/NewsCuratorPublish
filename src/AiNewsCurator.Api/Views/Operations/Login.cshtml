@@ -1,12 +1,12 @@
 @model AiNewsCurator.Api.Models.Operations.OperationsLoginViewModel
 @{
-    ViewData["Title"] = "Login Operacional";
+    ViewData["Title"] = "Operations Login";
 }
 
 <div style="min-height: 85vh; display: grid; place-items: center;">
     <div class="card" style="width: min(460px, 100%);">
         <h1 style="margin-top: 0;">AI News Curator Ops</h1>
-        <p class="muted">Entre com a API key interna para acessar a area operacional.</p>
+        <p class="muted">Enter the internal API key to access the operations area.</p>
 
         @if (!string.IsNullOrWhiteSpace(Model.ErrorMessage))
         {
@@ -23,7 +23,7 @@
             </label>
 
             <div class="actions" style="margin-top: 16px;">
-                <button type="submit">Entrar</button>
+                <button type="submit">Sign in</button>
             </div>
         </form>
     </div>

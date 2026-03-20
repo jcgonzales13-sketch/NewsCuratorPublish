@@ -21,9 +21,9 @@ public sealed class HeuristicAiCurationService : IAiCurationService
         var confidence = Math.Clamp(0.65 + (hits * 0.02), 0.0, 0.95);
         var keyPoints = new[]
         {
-            $"A noticia destaca: {newsItem.Title}.",
-            "O tema tem relacao direta com IA e impacto profissional.",
-            "Vale acompanhar o desdobramento para tecnologia e negocios."
+            $"The headline development is: {newsItem.Title}.",
+            "The topic is directly tied to AI and has practical relevance for professionals.",
+            "It is worth watching how this evolves for technology, product, and business teams."
         };
 
         var payload = JsonSerializer.Serialize(new
@@ -39,7 +39,7 @@ public sealed class HeuristicAiCurationService : IAiCurationService
             RelevanceScore = relevance,
             ConfidenceScore = confidence,
             Category = DetectCategory(corpus),
-            WhyRelevant = "Impacta profissionais de tecnologia e negocios com um fato recente sobre IA.",
+            WhyRelevant = "This story is relevant to technology and business professionals because it signals a meaningful AI development with practical implications.",
             Summary = newsItem.RawSummary ?? newsItem.Title,
             KeyPoints = keyPoints,
             LinkedInDraft = BuildDraft(newsItem),
@@ -84,9 +84,9 @@ public sealed class HeuristicAiCurationService : IAiCurationService
     {
         var baseSummary = newsItem.RawSummary ?? newsItem.Title;
         return
-            $"Uma noticia recente sobre IA chamou minha atencao: {newsItem.Title}. " +
-            $"Em termos praticos, o ponto central e este: {baseSummary}. " +
-            "O que torna esse movimento relevante para empresas e profissionais e a combinacao entre impacto de negocio, velocidade de adocao e necessidade de leitura critica. " +
-            "Vale observar como esse tema evolui nas proximas semanas e o que ele sinaliza para produto, operacao e estrategia.";
+            $"One AI story that stood out today is {newsItem.Title}. " +
+            $"At a practical level, the key takeaway is this: {baseSummary}. " +
+            "What makes this relevant is not just the announcement itself, but the broader signal it sends for product strategy, operational priorities, and competitive positioning. " +
+            "This is the kind of development worth tracking closely over the next few weeks.";
     }
 }

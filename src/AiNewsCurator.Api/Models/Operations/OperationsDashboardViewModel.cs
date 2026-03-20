@@ -5,7 +5,7 @@ namespace AiNewsCurator.Api.Models.Operations;
 
 public sealed class OperationsDashboardViewModel
 {
-    public IReadOnlyList<PostDraft> Drafts { get; init; } = [];
+    public IReadOnlyList<OperationsDraftViewModel> Drafts { get; init; } = [];
     public IReadOnlyList<ExecutionRun> Runs { get; init; } = [];
     public IReadOnlyList<Source> Sources { get; init; } = [];
     public IReadOnlyList<OperationsNewsItemViewModel> NewsItems { get; init; } = [];
@@ -14,7 +14,7 @@ public sealed class OperationsDashboardViewModel
     public string? FlashMessage { get; init; }
     public bool FlashIsError { get; init; }
 
-    public int PendingDraftCount => Drafts.Count(d => d.Status == DraftStatus.PendingApproval);
-    public int ApprovedDraftCount => Drafts.Count(d => d.Status == DraftStatus.Approved);
+    public int PendingDraftCount => Drafts.Count(d => d.Draft.Status == DraftStatus.PendingApproval);
+    public int ApprovedDraftCount => Drafts.Count(d => d.Draft.Status == DraftStatus.Approved);
     public int ActiveSourceCount => Sources.Count(s => s.IsActive);
 }

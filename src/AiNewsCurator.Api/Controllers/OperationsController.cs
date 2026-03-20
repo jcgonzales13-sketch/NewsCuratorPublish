@@ -17,7 +17,9 @@ public sealed class OperationsController : Controller
     private readonly ISourceRepository _sourceRepository;
     private readonly INewsItemRepository _newsItemRepository;
     private readonly ICurationResultRepository _curationResultRepository;
+    private readonly IPublicationRepository _publicationRepository;
     private readonly ILinkedInAuthService _linkedInAuthService;
+    private readonly INewsImageEnrichmentService _newsImageEnrichmentService;
     private readonly AppOptions _options;
 
     public OperationsController(
@@ -27,7 +29,9 @@ public sealed class OperationsController : Controller
         ISourceRepository sourceRepository,
         INewsItemRepository newsItemRepository,
         ICurationResultRepository curationResultRepository,
+        IPublicationRepository publicationRepository,
         ILinkedInAuthService linkedInAuthService,
+        INewsImageEnrichmentService newsImageEnrichmentService,
         IOptions<AppOptions> options)
     {
         _pipelineService = pipelineService;
@@ -36,7 +40,9 @@ public sealed class OperationsController : Controller
         _sourceRepository = sourceRepository;
         _newsItemRepository = newsItemRepository;
         _curationResultRepository = curationResultRepository;
+        _publicationRepository = publicationRepository;
         _linkedInAuthService = linkedInAuthService;
+        _newsImageEnrichmentService = newsImageEnrichmentService;
         _options = options.Value;
     }
 
@@ -55,7 +61,7 @@ public sealed class OperationsController : Controller
     {
         if (!string.Equals(model.ApiKey, _options.InternalApiKey, StringComparison.Ordinal))
         {
-            model.ErrorMessage = "API key invalida.";
+            model.ErrorMessage = "Invalid API key.";
             model.ApiKey = string.Empty;
             model.ReturnUrl = SanitizeReturnUrl(model.ReturnUrl);
             return View(model);
@@ -90,8 +96,22 @@ public sealed class OperationsController : Controller
         var drafts = await _postDraftRepository.GetPendingApprovalAsync(cancellationToken);
         var runs = await _executionRunRepository.GetRecentAsync(10, cancellationToken);
         var sources = await _sourceRepository.GetAllAsync(cancellationToken);
+        var sourceMap = sources.ToDictionary(source => source.Id, source => source.Name);
         var news = await _newsItemRepository.GetRecentAsync(10, cancellationToken);
         var linkedInStatus = await _linkedInAuthService.GetStatusAsync(cancellationToken);
+
+        var draftItems = new List<OperationsDraftViewModel>(drafts.Count);
+        foreach (var draft in drafts)
+        {
+            var newsItem = await _newsItemRepository.GetByIdAsync(draft.NewsItemId, cancellationToken);
+            draftItems.Add(new OperationsDraftViewModel
+            {
+                Draft = draft,
+                NewsItem = newsItem,
+                SourceName = newsItem is not null && sourceMap.TryGetValue(newsItem.SourceId, out var sourceName) ? sourceName : null,
+                LatestPublication = await _publicationRepository.GetLatestByDraftIdAsync(draft.Id, cancellationToken)
+            });
+        }
 
         var newsItems = new List<OperationsNewsItemViewModel>(news.Count);
         foreach (var item in news)
@@ -100,13 +120,20 @@ public sealed class OperationsController : Controller
             newsItems.Add(new OperationsNewsItemViewModel
             {
                 NewsItem = item,
-                LatestCuration = latestCuration
+                LatestCuration = latestCuration,
+                SourceName = sourceMap.TryGetValue(item.SourceId, out var sourceName) ? sourceName : null
             });
         }
 
+        newsItems = newsItems
+            .OrderByDescending(item => item.LatestCuration?.RelevanceScore ?? double.MinValue)
+            .ThenByDescending(item => item.LatestCuration?.ConfidenceScore ?? double.MinValue)
+            .ThenByDescending(item => item.NewsItem.PublishedAt)
+            .ToList();
+
         return View(new OperationsDashboardViewModel
         {
-            Drafts = drafts,
+            Drafts = draftItems,
             Runs = runs,
             Sources = sources.OrderByDescending(source => source.IsActive).ThenByDescending(source => source.Priority).ToList(),
             NewsItems = newsItems,
@@ -122,7 +149,7 @@ public sealed class OperationsController : Controller
     public async Task<IActionResult> RunDaily(CancellationToken cancellationToken)
     {
         var result = await _pipelineService.RunDailyAsync(BuildTriggerContext("ops-daily"), cancellationToken);
-        SetFlash($"Rotina diaria concluida. Coletadas: {result.ItemsCollected}. Curadas: {result.ItemsCurated}. Publicadas: {result.ItemsPublished}.");
+        SetFlash($"Daily run completed. Collected: {result.ItemsCollected}. Curated: {result.ItemsCurated}. Published: {result.ItemsPublished}.");
         return RedirectToAction(nameof(Index));
     }
 
@@ -131,7 +158,7 @@ public sealed class OperationsController : Controller
     public async Task<IActionResult> RunCollect(CancellationToken cancellationToken)
     {
         var itemsCollected = await _pipelineService.RunCollectAsync(BuildTriggerContext("ops-collect"), cancellationToken);
-        SetFlash($"Coleta concluida com {itemsCollected} itens.");
+        SetFlash($"Collection completed with {itemsCollected} items.");
         return RedirectToAction(nameof(Index));
     }
 
@@ -140,7 +167,17 @@ public sealed class OperationsController : Controller
     public async Task<IActionResult> RunCurate(CancellationToken cancellationToken)
     {
         var itemsCurated = await _pipelineService.RunCurateAsync(BuildTriggerContext("ops-curate"), cancellationToken);
-        SetFlash($"Curadoria concluida com {itemsCurated} drafts candidatos.");
+        SetFlash($"Curation completed with {itemsCurated} draft candidates.");
+        return RedirectToAction(nameof(Index));
+    }
+
+    [HttpPost("/ops/actions/normalize-news")]
+    [ValidateAntiForgeryToken]
+    public async Task<IActionResult> NormalizeNews(CancellationToken cancellationToken)
+    {
+        var itemsNormalized = await _newsItemRepository.NormalizeStoredContentAsync(cancellationToken);
+        var imagesEnriched = await _newsImageEnrichmentService.BackfillMissingImagesAsync(cancellationToken);
+        SetFlash($"Normalization completed for {itemsNormalized} news items. Images enriched: {imagesEnriched}.");
         return RedirectToAction(nameof(Index));
     }
 
@@ -149,7 +186,7 @@ public sealed class OperationsController : Controller
     public async Task<IActionResult> ApproveDraft(long id, CancellationToken cancellationToken)
     {
         var success = await _pipelineService.ApproveDraftAsync(id, "ops-ui", cancellationToken);
-        SetFlash(success ? "Draft aprovado." : "Nao foi possivel aprovar o draft.", !success);
+        SetFlash(success ? "Draft approved." : "Unable to approve the draft.", !success);
         return RedirectToAction(nameof(Index));
     }
 
@@ -158,7 +195,7 @@ public sealed class OperationsController : Controller
     public async Task<IActionResult> RejectDraft(long id, CancellationToken cancellationToken)
     {
         var success = await _pipelineService.RejectDraftAsync(id, "ops-ui", cancellationToken);
-        SetFlash(success ? "Draft rejeitado." : "Nao foi possivel rejeitar o draft.", !success);
+        SetFlash(success ? "Draft rejected." : "Unable to reject the draft.", !success);
         return RedirectToAction(nameof(Index));
     }
 
@@ -167,13 +204,13 @@ public sealed class OperationsController : Controller
     public async Task<IActionResult> PublishDraft(long id, CancellationToken cancellationToken)
     {
         var success = await _pipelineService.PublishDraftAsync(id, "ops-ui", cancellationToken);
-        SetFlash(success ? "Draft publicado no LinkedIn." : "Nao foi possivel publicar o draft.", !success);
+        SetFlash(success ? "Draft published on LinkedIn." : "Unable to publish the draft.", !success);
         return RedirectToAction(nameof(Index));
     }
 
     [HttpPost("/ops/sources")]
     [ValidateAntiForgeryToken]
-    public async Task<IActionResult> CreateSource(CreateSourceFormModel model, CancellationToken cancellationToken)
+    public async Task<IActionResult> CreateSource([Bind(Prefix = "CreateSource")] CreateSourceFormModel model, CancellationToken cancellationToken)
     {
         if (!SourceInputMapper.TryBuildSource(
                 model.Name,
@@ -189,14 +226,14 @@ public sealed class OperationsController : Controller
                 out var source,
                 out var error))
         {
-            SetFlash(error ?? "Nao foi possivel criar a fonte.", true);
+            SetFlash(error ?? "Unable to create the source.", true);
             return RedirectToAction(nameof(Index));
         }
 
         source!.CreatedAt = DateTimeOffset.UtcNow;
         source.UpdatedAt = DateTimeOffset.UtcNow;
         await _sourceRepository.InsertAsync(source, cancellationToken);
-        SetFlash("Fonte criada com sucesso.");
+        SetFlash("Source created successfully.");
         return RedirectToAction(nameof(Index));
     }
 
@@ -207,14 +244,23 @@ public sealed class OperationsController : Controller
         var source = await _sourceRepository.GetByIdAsync(id, cancellationToken);
         if (source is null)
         {
-            SetFlash("Fonte nao encontrada.", true);
+            SetFlash("Source not found.", true);
             return RedirectToAction(nameof(Index));
         }
 
         source.IsActive = !source.IsActive;
         source.UpdatedAt = DateTimeOffset.UtcNow;
         await _sourceRepository.UpdateAsync(source, cancellationToken);
-        SetFlash(source.IsActive ? "Fonte ativada." : "Fonte desativada.");
+        SetFlash(source.IsActive ? "Source activated." : "Source deactivated.");
+        return RedirectToAction(nameof(Index));
+    }
+
+    [HttpPost("/ops/news/{id:long}/draft")]
+    [ValidateAntiForgeryToken]
+    public async Task<IActionResult> CreateManualDraft(long id, CancellationToken cancellationToken)
+    {
+        var success = await _pipelineService.CreateManualDraftAsync(id, "ops-ui", cancellationToken);
+        SetFlash(success ? "Manual draft created from the news item." : "Unable to create a draft for this news item.", !success);
         return RedirectToAction(nameof(Index));
     }
 

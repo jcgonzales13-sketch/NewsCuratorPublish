@@ -3,6 +3,7 @@ using AiNewsCurator.Domain.Enums;
 using AiNewsCurator.Domain.Interfaces;
 using AiNewsCurator.Infrastructure.Persistence;
 using Microsoft.Data.Sqlite;
+using System.Net;
 
 namespace AiNewsCurator.Infrastructure.Repositories;
 
@@ -69,9 +70,9 @@ public sealed class NewsItemRepository : INewsItemRepository
         command.CommandText =
             """
             INSERT INTO NewsItems
-            (SourceId, ExternalId, Title, Url, CanonicalUrl, Author, PublishedAt, Language, RawSummary, RawContent, ContentHash, TitleHash, Status, CreatedAt, UpdatedAt)
+            (SourceId, ExternalId, Title, Url, CanonicalUrl, ImageUrl, ImageOrigin, Author, PublishedAt, Language, RawSummary, RawContent, ContentHash, TitleHash, Status, CreatedAt, UpdatedAt)
             VALUES
-            (@SourceId, @ExternalId, @Title, @Url, @CanonicalUrl, @Author, @PublishedAt, @Language, @RawSummary, @RawContent, @ContentHash, @TitleHash, @Status, @CreatedAt, @UpdatedAt);
+            (@SourceId, @ExternalId, @Title, @Url, @CanonicalUrl, @ImageUrl, @ImageOrigin, @Author, @PublishedAt, @Language, @RawSummary, @RawContent, @ContentHash, @TitleHash, @Status, @CreatedAt, @UpdatedAt);
             SELECT last_insert_rowid();
             """;
         command.Parameters.AddWithValue("@SourceId", newsItem.SourceId);
@@ -79,6 +80,8 @@ public sealed class NewsItemRepository : INewsItemRepository
         command.Parameters.AddWithValue("@Title", newsItem.Title);
         command.Parameters.AddWithValue("@Url", newsItem.Url);
         command.Parameters.AddWithValue("@CanonicalUrl", newsItem.CanonicalUrl);
+        command.Parameters.AddWithValue("@ImageUrl", (object?)newsItem.ImageUrl ?? DBNull.Value);
+        command.Parameters.AddWithValue("@ImageOrigin", (object?)newsItem.ImageOrigin ?? DBNull.Value);
         command.Parameters.AddWithValue("@Author", (object?)newsItem.Author ?? DBNull.Value);
         command.Parameters.AddWithValue("@PublishedAt", newsItem.PublishedAt.ToString("O"));
         command.Parameters.AddWithValue("@Language", newsItem.Language);
@@ -98,6 +101,18 @@ public sealed class NewsItemRepository : INewsItemRepository
         await using var command = connection.CreateCommand();
         command.CommandText = "UPDATE NewsItems SET Status = @Status, UpdatedAt = @UpdatedAt WHERE Id = @Id";
         command.Parameters.AddWithValue("@Status", (int)status);
+        command.Parameters.AddWithValue("@UpdatedAt", DateTimeOffset.UtcNow.ToString("O"));
+        command.Parameters.AddWithValue("@Id", id);
+        await command.ExecuteNonQueryAsync(cancellationToken);
+    }
+
+    public async Task UpdateImageAsync(long id, string imageUrl, string imageOrigin, CancellationToken cancellationToken)
+    {
+        await using var connection = await _connectionFactory.OpenAsync(cancellationToken);
+        await using var command = connection.CreateCommand();
+        command.CommandText = "UPDATE NewsItems SET ImageUrl = @ImageUrl, ImageOrigin = @ImageOrigin, UpdatedAt = @UpdatedAt WHERE Id = @Id";
+        command.Parameters.AddWithValue("@ImageUrl", imageUrl);
+        command.Parameters.AddWithValue("@ImageOrigin", imageOrigin);
         command.Parameters.AddWithValue("@UpdatedAt", DateTimeOffset.UtcNow.ToString("O"));
         command.Parameters.AddWithValue("@Id", id);
         await command.ExecuteNonQueryAsync(cancellationToken);
@@ -150,6 +165,83 @@ public sealed class NewsItemRepository : INewsItemRepository
         return items;
     }
 
+    public async Task<IReadOnlyList<NewsItem>> GetWithoutImageAsync(CancellationToken cancellationToken)
+    {
+        await using var connection = await _connectionFactory.OpenAsync(cancellationToken);
+        await using var command = connection.CreateCommand();
+        command.CommandText =
+            """
+            SELECT * FROM NewsItems
+            WHERE ImageUrl IS NULL OR TRIM(ImageUrl) = ''
+            ORDER BY PublishedAt DESC, Id DESC
+            """;
+
+        var items = new List<NewsItem>();
+        await using var reader = await command.ExecuteReaderAsync(cancellationToken);
+        while (await reader.ReadAsync(cancellationToken))
+        {
+            items.Add(Map(reader));
+        }
+
+        return items;
+    }
+
+    public async Task<int> NormalizeStoredContentAsync(CancellationToken cancellationToken)
+    {
+        await using var connection = await _connectionFactory.OpenAsync(cancellationToken);
+        await using var select = connection.CreateCommand();
+        select.CommandText = "SELECT Id, Title, RawSummary, RawContent FROM NewsItems";
+
+        var items = new List<(long Id, string Title, string? RawSummary, string? RawContent)>();
+        await using (var reader = await select.ExecuteReaderAsync(cancellationToken))
+        {
+            while (await reader.ReadAsync(cancellationToken))
+            {
+                items.Add((
+                    reader.GetInt64(reader.GetOrdinal("Id")),
+                    reader.GetString(reader.GetOrdinal("Title")),
+                    reader.GetNullableString("RawSummary"),
+                    reader.GetNullableString("RawContent")));
+            }
+        }
+
+        var updatedCount = 0;
+        foreach (var item in items)
+        {
+            var normalizedTitle = Decode(item.Title);
+            var normalizedSummary = Decode(item.RawSummary);
+            var normalizedContent = Decode(item.RawContent);
+
+            if (normalizedTitle == item.Title &&
+                normalizedSummary == item.RawSummary &&
+                normalizedContent == item.RawContent)
+            {
+                continue;
+            }
+
+            await using var update = connection.CreateCommand();
+            update.CommandText =
+                """
+                UPDATE NewsItems
+                SET Title = @Title,
+                    RawSummary = @RawSummary,
+                    RawContent = @RawContent,
+                    UpdatedAt = @UpdatedAt
+                WHERE Id = @Id
+                """;
+            update.Parameters.AddWithValue("@Title", normalizedTitle);
+            update.Parameters.AddWithValue("@RawSummary", (object?)normalizedSummary ?? DBNull.Value);
+            update.Parameters.AddWithValue("@RawContent", (object?)normalizedContent ?? DBNull.Value);
+            update.Parameters.AddWithValue("@UpdatedAt", DateTimeOffset.UtcNow.ToString("O"));
+            update.Parameters.AddWithValue("@Id", item.Id);
+
+            await update.ExecuteNonQueryAsync(cancellationToken);
+            updatedCount++;
+        }
+
+        return updatedCount;
+    }
+
     private async Task<NewsItem?> GetSingleAsync(string sql, (string Name, object Value) parameter, CancellationToken cancellationToken)
     {
         await using var connection = await _connectionFactory.OpenAsync(cancellationToken);
@@ -170,6 +262,8 @@ public sealed class NewsItemRepository : INewsItemRepository
             Title = reader.GetString(reader.GetOrdinal("Title")),
             Url = reader.GetString(reader.GetOrdinal("Url")),
             CanonicalUrl = reader.GetString(reader.GetOrdinal("CanonicalUrl")),
+            ImageUrl = reader.GetNullableString("ImageUrl"),
+            ImageOrigin = reader.GetNullableString("ImageOrigin"),
             Author = reader.GetNullableString("Author"),
             PublishedAt = DateTimeOffset.Parse(reader.GetString(reader.GetOrdinal("PublishedAt"))),
             Language = reader.GetString(reader.GetOrdinal("Language")),
@@ -181,5 +275,15 @@ public sealed class NewsItemRepository : INewsItemRepository
             CreatedAt = DateTimeOffset.Parse(reader.GetString(reader.GetOrdinal("CreatedAt"))),
             UpdatedAt = DateTimeOffset.Parse(reader.GetString(reader.GetOrdinal("UpdatedAt")))
         };
+    }
+
+    private static string? Decode(string? value)
+    {
+        if (string.IsNullOrWhiteSpace(value))
+        {
+            return value;
+        }
+
+        return WebUtility.HtmlDecode(value).Trim();
     }
 }
