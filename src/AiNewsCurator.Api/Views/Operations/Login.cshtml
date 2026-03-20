@@ -1,0 +1,30 @@
+@model AiNewsCurator.Api.Models.Operations.OperationsLoginViewModel
+@{
+    ViewData["Title"] = "Login Operacional";
+}
+
+<div style="min-height: 85vh; display: grid; place-items: center;">
+    <div class="card" style="width: min(460px, 100%);">
+        <h1 style="margin-top: 0;">AI News Curator Ops</h1>
+        <p class="muted">Entre com a API key interna para acessar a area operacional.</p>
+
+        @if (!string.IsNullOrWhiteSpace(Model.ErrorMessage))
+        {
+            <div class="flash error">@Model.ErrorMessage</div>
+        }
+
+        <form method="post" asp-action="Login">
+            @Html.AntiForgeryToken()
+            <input type="hidden" asp-for="ReturnUrl" />
+
+            <label asp-for="ApiKey">
+                API Key
+                <input asp-for="ApiKey" type="password" autocomplete="current-password" />
+            </label>
+
+            <div class="actions" style="margin-top: 16px;">
+                <button type="submit">Entrar</button>
+            </div>
+        </form>
+    </div>
+</div>

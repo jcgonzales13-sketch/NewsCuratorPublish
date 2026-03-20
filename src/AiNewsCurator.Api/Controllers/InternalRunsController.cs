@@ -1,11 +1,11 @@
 using AiNewsCurator.Application.DTOs;
 using AiNewsCurator.Application.Interfaces;
 using AiNewsCurator.Api.Contracts;
+using AiNewsCurator.Api.Operations;
 using AiNewsCurator.Domain.Entities;
 using AiNewsCurator.Domain.Enums;
 using AiNewsCurator.Domain.Interfaces;
 using Microsoft.AspNetCore.Mvc;
-using System.Text.Json;
 
 namespace AiNewsCurator.Api.Controllers;
 
@@ -160,7 +160,7 @@ public sealed class InternalRunsController : ControllerBase
     [HttpPost("sources")]
     public async Task<IActionResult> CreateSource([FromBody] CreateSourceRequest request, CancellationToken cancellationToken)
     {
-        if (!TryBuildSource(request.Name, request.Type, request.Url, request.Language, request.IsActive, request.Priority, request.MaxItemsPerRun, request.IncludeKeywords, request.ExcludeKeywords, request.Tags, out var source, out var error))
+        if (!SourceInputMapper.TryBuildSource(request.Name, request.Type, request.Url, request.Language, request.IsActive, request.Priority, request.MaxItemsPerRun, request.IncludeKeywords, request.ExcludeKeywords, request.Tags, out var source, out var error))
         {
             return BadRequest(new { error });
         }
@@ -181,7 +181,7 @@ public sealed class InternalRunsController : ControllerBase
             return NotFound();
         }
 
-        if (!TryBuildSource(request.Name, request.Type, request.Url, request.Language, request.IsActive, request.Priority, request.MaxItemsPerRun, request.IncludeKeywords, request.ExcludeKeywords, request.Tags, out var updated, out var error))
+        if (!SourceInputMapper.TryBuildSource(request.Name, request.Type, request.Url, request.Language, request.IsActive, request.Priority, request.MaxItemsPerRun, request.IncludeKeywords, request.ExcludeKeywords, request.Tags, out var updated, out var error))
         {
             return BadRequest(new { error });
         }
@@ -206,57 +206,5 @@ public sealed class InternalRunsController : ControllerBase
         existing.UpdatedAt = DateTimeOffset.UtcNow;
         await _sourceRepository.UpdateAsync(existing, cancellationToken);
         return Ok(existing);
-    }
-
-    private static bool TryBuildSource(
-        string name,
-        string type,
-        string url,
-        string language,
-        bool isActive,
-        int priority,
-        int maxItemsPerRun,
-        string[] includeKeywords,
-        string[] excludeKeywords,
-        string[] tags,
-        out Source? source,
-        out string? error)
-    {
-        source = null;
-        error = null;
-
-        if (!Enum.TryParse<SourceType>(type, true, out var sourceType))
-        {
-            error = "Invalid source type.";
-            return false;
-        }
-
-        if (!Uri.TryCreate(url, UriKind.Absolute, out _))
-        {
-            error = "Invalid source URL.";
-            return false;
-        }
-
-        if (string.IsNullOrWhiteSpace(name))
-        {
-            error = "Source name is required.";
-            return false;
-        }
-
-        source = new Source
-        {
-            Name = name.Trim(),
-            Type = sourceType,
-            Url = url.Trim(),
-            Language = language.Trim(),
-            IsActive = isActive,
-            Priority = priority,
-            MaxItemsPerRun = maxItemsPerRun,
-            IncludeKeywordsJson = JsonSerializer.Serialize(includeKeywords),
-            ExcludeKeywordsJson = JsonSerializer.Serialize(excludeKeywords),
-            TagsJson = JsonSerializer.Serialize(tags)
-        };
-
-        return true;
     }
 }

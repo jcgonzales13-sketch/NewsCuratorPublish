@@ -12,7 +12,7 @@ builder.Configuration.AddMappedEnvironmentVariables();
 
 builder.Services.AddApplication(builder.Configuration);
 builder.Services.AddInfrastructure(builder.Configuration);
-builder.Services.AddControllers();
+builder.Services.AddControllersWithViews();
 builder.Services.AddEndpointsApiExplorer();
 builder.Services.AddSwaggerGen();
 
@@ -33,7 +33,9 @@ using (var scope = app.Services.CreateScope())
 
 app.UseSwagger();
 app.UseSwaggerUI();
+app.UseMiddleware<OperationsAccessMiddleware>();
 app.UseMiddleware<InternalApiKeyMiddleware>();
 app.MapControllers();
+app.MapDefaultControllerRoute();
 
 app.Run();

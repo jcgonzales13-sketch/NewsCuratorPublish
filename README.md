@@ -49,6 +49,14 @@ Em outro terminal:
 dotnet run --project src/AiNewsCurator.Worker
 ```
 
+Tambem existe uma UI operacional minima em `GET /ops`. Ela pede a mesma `INTERNAL_API_KEY`, mas por uma tela de login simples, e permite:
+
+- rodar coleta, curadoria e rotina diaria
+- revisar drafts pendentes
+- publicar drafts aprovados
+- cadastrar e ativar/desativar fontes
+- acompanhar execucoes recentes e status do LinkedIn
+
 ## Endpoints internos
 
 Todos exigem `X-API-Key`.

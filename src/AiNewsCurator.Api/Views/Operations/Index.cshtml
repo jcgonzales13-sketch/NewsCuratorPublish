@@ -1,0 +1,288 @@
+@model AiNewsCurator.Api.Models.Operations.OperationsDashboardViewModel
+@{
+    ViewData["Title"] = "Operacoes";
+}
+
+<div class="topbar">
+    <div class="brand">
+        <h1>AI News Curator</h1>
+        <p>Painel minimo para operacao diaria, revisao de drafts e gestao de fontes.</p>
+    </div>
+
+    <form method="post" asp-action="Logout">
+        @Html.AntiForgeryToken()
+        <button type="submit" class="secondary">Sair</button>
+    </form>
+</div>
+
+@if (!string.IsNullOrWhiteSpace(Model.FlashMessage))
+{
+    <div class="flash @(Model.FlashIsError ? "error" : "success")">@Model.FlashMessage</div>
+}
+
+<section class="grid stats">
+    <article class="card">
+        <div class="stat-value">@Model.PendingDraftCount</div>
+        <div>Drafts pendentes</div>
+        <div class="muted">@Model.ApprovedDraftCount aprovados aguardando publicacao</div>
+    </article>
+    <article class="card">
+        <div class="stat-value">@Model.ActiveSourceCount</div>
+        <div>Fontes ativas</div>
+        <div class="muted">@Model.Sources.Count fontes configuradas</div>
+    </article>
+    <article class="card">
+        <div class="stat-value">@(Model.Runs.FirstOrDefault()?.ItemsCollected ?? 0)</div>
+        <div>Coleta mais recente</div>
+        <div class="muted">Itens da ultima execucao registrada</div>
+    </article>
+    <article class="card">
+        <div class="stat-value">@(Model.LinkedInStatus.HasAccessToken ? "OK" : "Pendente")</div>
+        <div>LinkedIn</div>
+        <div class="muted">@((Model.LinkedInStatus.MemberName ?? "Conta nao conectada"))</div>
+    </article>
+</section>
+
+<section class="card" style="margin-top: 20px;">
+    <div class="toolbar">
+        <div>
+            <h2 style="margin-bottom: 6px;">Acoes rapidas</h2>
+            <div class="muted">Execute o pipeline por etapa ou reconecte o LinkedIn.</div>
+        </div>
+        <div class="actions">
+            <form method="post" action="/ops/linkedin/connect">
+                @Html.AntiForgeryToken()
+                <button type="submit" class="secondary">Conectar LinkedIn</button>
+            </form>
+        </div>
+    </div>
+
+    <div class="actions">
+        <form method="post" action="/ops/actions/daily">
+            @Html.AntiForgeryToken()
+            <button type="submit">Rodar rotina diaria</button>
+        </form>
+        <form method="post" action="/ops/actions/collect">
+            @Html.AntiForgeryToken()
+            <button type="submit" class="secondary">Rodar coleta</button>
+        </form>
+        <form method="post" action="/ops/actions/curate">
+            @Html.AntiForgeryToken()
+            <button type="submit" class="secondary">Rodar curadoria</button>
+        </form>
+    </div>
+</section>
+
+<div class="grid main-grid" style="margin-top: 20px;">
+    <div class="grid">
+        <section class="card">
+            <div class="toolbar">
+                <div>
+                    <h2 style="margin-bottom: 6px;">Drafts para revisao</h2>
+                    <div class="muted">Pendentes e aprovados aparecem aqui para facilitar publicacao manual.</div>
+                </div>
+            </div>
+
+            @if (Model.Drafts.Count == 0)
+            {
+                <p class="muted">Nenhum draft pendente no momento.</p>
+            }
+            else
+            {
+                <div class="list">
+                    @foreach (var draft in Model.Drafts)
+                    {
+                        <article class="item">
+                            <div class="item-header">
+                                <div>
+                                    <h3>@(string.IsNullOrWhiteSpace(draft.TitleSuggestion) ? $"Draft #{draft.Id}" : draft.TitleSuggestion)</h3>
+                                    <div class="muted">Noticia #@draft.NewsItemId • criado em @draft.CreatedAt.LocalDateTime.ToString("dd/MM/yyyy HH:mm")</div>
+                                </div>
+                                <span class="badge">@draft.Status</span>
+                            </div>
+
+                            <p style="white-space: pre-wrap;">@draft.PostText</p>
+
+                            <div class="inline-actions">
+                                @if (draft.Status == AiNewsCurator.Domain.Enums.DraftStatus.PendingApproval)
+                                {
+                                    <form method="post" action="/ops/drafts/@draft.Id/approve">
+                                        @Html.AntiForgeryToken()
+                                        <button type="submit">Aprovar</button>
+                                    </form>
+                                    <form method="post" action="/ops/drafts/@draft.Id/reject">
+                                        @Html.AntiForgeryToken()
+                                        <button type="submit" class="danger">Rejeitar</button>
+                                    </form>
+                                }
+
+                                @if (draft.Status == AiNewsCurator.Domain.Enums.DraftStatus.Approved)
+                                {
+                                    <form method="post" action="/ops/drafts/@draft.Id/publish">
+                                        @Html.AntiForgeryToken()
+                                        <button type="submit">Publicar no LinkedIn</button>
+                                    </form>
+                                }
+                            </div>
+                        </article>
+                    }
+                </div>
+            }
+        </section>
+
+        <section class="card">
+            <h2 style="margin-bottom: 6px;">Noticias recentes</h2>
+            <div class="muted" style="margin-bottom: 14px;">Visao rapida para entender o que foi coletado e por que foi aceito ou rejeitado.</div>
+
+            <div class="list">
+                @foreach (var item in Model.NewsItems)
+                {
+                    <article class="item">
+                        <div class="item-header">
+                            <div>
+                                <h3>@item.NewsItem.Title</h3>
+                                <div class="muted">@item.NewsItem.PublishedAt.LocalDateTime.ToString("dd/MM/yyyy HH:mm") • status @item.NewsItem.Status</div>
+                            </div>
+                            <a href="@item.NewsItem.CanonicalUrl" target="_blank" rel="noreferrer" class="button-link secondary">Abrir noticia</a>
+                        </div>
+
+                        @if (item.LatestCuration is not null)
+                        {
+                            <p><strong>Curadoria:</strong> @item.LatestCuration.WhyRelevant</p>
+                            <p class="muted">Relevancia @item.LatestCuration.RelevanceScore.ToString("0.00") • confianca @item.LatestCuration.ConfidenceScore.ToString("0.00") • publicar @(item.LatestCuration.ShouldPublish ? "sim" : "nao")</p>
+                        }
+                        else
+                        {
+                            <p class="muted">Sem curadoria registrada ainda.</p>
+                        }
+                    </article>
+                }
+            </div>
+        </section>
+    </div>
+
+    <div class="grid">
+        <section class="card">
+            <h2 style="margin-bottom: 6px;">LinkedIn</h2>
+            <div class="list">
+                <div class="item">
+                    <div><strong>Configurado:</strong> @(Model.LinkedInStatus.IsConfigured ? "sim" : "nao")</div>
+                    <div><strong>Token:</strong> @(Model.LinkedInStatus.HasAccessToken ? "disponivel" : "ausente")</div>
+                    <div><strong>Membro:</strong> @(Model.LinkedInStatus.MemberName ?? "-")</div>
+                    <div><strong>Email:</strong> @(Model.LinkedInStatus.MemberEmail ?? "-")</div>
+                    <div><strong>Atualizado:</strong> @(Model.LinkedInStatus.TokenUpdatedAt?.LocalDateTime.ToString("dd/MM/yyyy HH:mm") ?? "-")</div>
+                </div>
+            </div>
+        </section>
+
+        <section class="card">
+            <h2 style="margin-bottom: 6px;">Nova fonte</h2>
+            <div class="muted" style="margin-bottom: 14px;">Cadastro rapido para RSS e outras fontes simples.</div>
+
+            <form method="post" action="/ops/sources" class="grid">
+                @Html.AntiForgeryToken()
+
+                <label>
+                    Nome
+                    <input asp-for="CreateSource.Name" />
+                </label>
+
+                <div class="split">
+                    <label>
+                        Tipo
+                        <select asp-for="CreateSource.Type">
+                            <option value="Rss">RSS</option>
+                            <option value="Site">Site</option>
+                            <option value="Api">API</option>
+                        </select>
+                    </label>
+                    <label>
+                        Idioma
+                        <input asp-for="CreateSource.Language" />
+                    </label>
+                </div>
+
+                <label>
+                    URL
+                    <input asp-for="CreateSource.Url" />
+                </label>
+
+                <div class="split">
+                    <label>
+                        Prioridade
+                        <input asp-for="CreateSource.Priority" type="number" />
+                    </label>
+                    <label>
+                        Maximo por coleta
+                        <input asp-for="CreateSource.MaxItemsPerRun" type="number" min="1" />
+                    </label>
+                </div>
+
+                <label>
+                    Tags
+                    <input asp-for="CreateSource.Tags" placeholder="ai, llm, agentes" />
+                </label>
+                <label>
+                    Keywords de inclusao
+                    <input asp-for="CreateSource.IncludeKeywords" placeholder="openai, model, agent" />
+                </label>
+                <label>
+                    Keywords de exclusao
+                    <input asp-for="CreateSource.ExcludeKeywords" placeholder="sports, politics" />
+                </label>
+
+                <label style="display: flex; align-items: center; gap: 10px;">
+                    <input asp-for="CreateSource.IsActive" type="checkbox" style="width: auto;" />
+                    Ativar imediatamente
+                </label>
+
+                <div class="actions">
+                    <button type="submit">Salvar fonte</button>
+                </div>
+            </form>
+        </section>
+
+        <section class="card">
+            <h2 style="margin-bottom: 6px;">Fontes configuradas</h2>
+            <div class="list">
+                @foreach (var source in Model.Sources)
+                {
+                    <article class="item">
+                        <div class="item-header">
+                            <div>
+                                <h3>@source.Name</h3>
+                                <div class="muted">@source.Type • prioridade @source.Priority • max @source.MaxItemsPerRun</div>
+                            </div>
+                            <span class="badge">@(source.IsActive ? "Ativa" : "Inativa")</span>
+                        </div>
+
+                        <p><a href="@source.Url" target="_blank" rel="noreferrer">@source.Url</a></p>
+                        <form method="post" action="/ops/sources/@source.Id/toggle">
+                            @Html.AntiForgeryToken()
+                            <button type="submit" class="secondary">@(source.IsActive ? "Desativar" : "Ativar")</button>
+                        </form>
+                    </article>
+                }
+            </div>
+        </section>
+
+        <section class="card">
+            <h2 style="margin-bottom: 6px;">Execucoes recentes</h2>
+            <div class="list">
+                @foreach (var run in Model.Runs)
+                {
+                    <article class="item">
+                        <div class="item-header">
+                            <div>
+                                <h3>Execucao #@run.Id</h3>
+                                <div class="muted">@run.StartedAt.LocalDateTime.ToString("dd/MM/yyyy HH:mm") • @run.TriggerType • @run.Status</div>
+                            </div>
+                            <span class="badge">publicadas @run.ItemsPublished</span>
+                        </div>
+                        <p class="muted">Coletadas @run.ItemsCollected • curadas @run.ItemsCurated • aprovadas @run.ItemsApproved • erros @run.ErrorCount</p>
+                    </article>
+                }
+            </div>
+        </section>
+    </div>
+</div>

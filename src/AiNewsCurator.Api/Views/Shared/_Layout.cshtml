@@ -1,0 +1,230 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>@ViewData["Title"] - AI News Curator</title>
+    <style>
+        :root {
+            color-scheme: light;
+            --bg: #f4efe8;
+            --surface: #fffdf9;
+            --surface-strong: #f7f0e8;
+            --border: #dcc9b6;
+            --text: #1f1a16;
+            --muted: #6e6257;
+            --accent: #0c5c56;
+            --accent-strong: #083d39;
+            --danger: #a0352f;
+            --danger-soft: #f8dfdc;
+            --success-soft: #e1f1eb;
+        }
+
+        * { box-sizing: border-box; }
+        body {
+            margin: 0;
+            font-family: "Segoe UI", system-ui, sans-serif;
+            background: linear-gradient(180deg, #efe4d6 0%, var(--bg) 45%, #f9f7f3 100%);
+            color: var(--text);
+        }
+
+        a { color: var(--accent-strong); }
+        .shell {
+            max-width: 1240px;
+            margin: 0 auto;
+            padding: 24px;
+        }
+
+        .topbar {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            gap: 16px;
+            margin-bottom: 24px;
+        }
+
+        .brand h1 {
+            margin: 0;
+            font-size: 1.9rem;
+        }
+
+        .brand p {
+            margin: 6px 0 0;
+            color: var(--muted);
+        }
+
+        .grid {
+            display: grid;
+            gap: 20px;
+        }
+
+        .stats {
+            grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+        }
+
+        .main-grid {
+            grid-template-columns: 2fr 1fr;
+            align-items: start;
+        }
+
+        .card {
+            background: rgba(255, 253, 249, 0.92);
+            border: 1px solid rgba(220, 201, 182, 0.8);
+            border-radius: 18px;
+            padding: 18px;
+            box-shadow: 0 14px 30px rgba(58, 42, 28, 0.06);
+            backdrop-filter: blur(12px);
+        }
+
+        .card h2, .card h3 {
+            margin-top: 0;
+        }
+
+        .stat-value {
+            font-size: 2rem;
+            font-weight: 700;
+            margin-bottom: 6px;
+        }
+
+        .muted {
+            color: var(--muted);
+        }
+
+        .actions,
+        .inline-actions {
+            display: flex;
+            gap: 10px;
+            flex-wrap: wrap;
+        }
+
+        form { margin: 0; }
+
+        button,
+        .button-link {
+            border: 0;
+            border-radius: 999px;
+            background: var(--accent);
+            color: white;
+            padding: 10px 16px;
+            font: inherit;
+            cursor: pointer;
+            text-decoration: none;
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+        }
+
+        button.secondary,
+        .button-link.secondary {
+            background: #ede2d3;
+            color: var(--text);
+        }
+
+        button.danger {
+            background: var(--danger);
+        }
+
+        .flash {
+            padding: 14px 16px;
+            border-radius: 14px;
+            margin-bottom: 18px;
+        }
+
+        .flash.success {
+            background: var(--success-soft);
+            border: 1px solid #badacb;
+        }
+
+        .flash.error {
+            background: var(--danger-soft);
+            border: 1px solid #e2b1ad;
+        }
+
+        .list {
+            display: grid;
+            gap: 14px;
+        }
+
+        .item {
+            padding: 16px;
+            border: 1px solid var(--border);
+            border-radius: 16px;
+            background: var(--surface);
+        }
+
+        .item-header {
+            display: flex;
+            justify-content: space-between;
+            gap: 16px;
+            align-items: start;
+        }
+
+        .item-header h3 {
+            margin: 0 0 8px;
+            font-size: 1.05rem;
+        }
+
+        .badge {
+            display: inline-flex;
+            align-items: center;
+            padding: 6px 10px;
+            border-radius: 999px;
+            background: var(--surface-strong);
+            color: var(--accent-strong);
+            font-size: 0.85rem;
+            white-space: nowrap;
+        }
+
+        .split {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 12px;
+        }
+
+        label {
+            display: grid;
+            gap: 6px;
+            font-weight: 600;
+            font-size: 0.95rem;
+        }
+
+        input,
+        select {
+            width: 100%;
+            border: 1px solid var(--border);
+            border-radius: 12px;
+            padding: 10px 12px;
+            font: inherit;
+            background: white;
+            color: var(--text);
+        }
+
+        .toolbar {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            gap: 12px;
+            margin-bottom: 14px;
+        }
+
+        @@media (max-width: 960px) {
+            .main-grid,
+            .split {
+                grid-template-columns: 1fr;
+            }
+
+            .topbar,
+            .item-header,
+            .toolbar {
+                flex-direction: column;
+                align-items: stretch;
+            }
+        }
+    </style>
+</head>
+<body>
+    <div class="shell">
+        @RenderBody()
+    </div>
+</body>
+</html>
