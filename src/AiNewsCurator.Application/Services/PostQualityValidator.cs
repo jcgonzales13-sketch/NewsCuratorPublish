@@ -34,7 +34,9 @@ public static class PostQualityValidator
         }
 
         if (!trimmed.Contains("IA", StringComparison.OrdinalIgnoreCase) &&
-            !trimmed.Contains("inteligencia artificial", StringComparison.OrdinalIgnoreCase))
+            !trimmed.Contains("AI", StringComparison.OrdinalIgnoreCase) &&
+            !trimmed.Contains("inteligencia artificial", StringComparison.OrdinalIgnoreCase) &&
+            !trimmed.Contains("artificial intelligence", StringComparison.OrdinalIgnoreCase))
         {
             result.Errors.Add("Post text must mention AI context.");
         }
@@ -44,12 +46,34 @@ public static class PostQualityValidator
             result.Errors.Add("Post text contains unresolved placeholders.");
         }
 
+        var editorialDraft = LinkedInEditorialPostFormatter.Parse(trimmed);
+        var quality = LinkedInEditorialQualityAnalyzer.Analyze(editorialDraft);
+        if (quality.HookRepeatsHeadline)
+        {
+            result.Errors.Add("Hook should complement the headline instead of repeating it.");
+        }
+
+        if (quality.WhyItMattersTooAbstract)
+        {
+            result.Errors.Add("Why it matters should be more concrete.");
+        }
+
+        if (quality.TakeawayTooGeneric)
+        {
+            result.Errors.Add("Strategic takeaway should be sharper.");
+        }
+
         foreach (var phrase in ForbiddenPhrases)
         {
             if (trimmed.Contains(phrase, StringComparison.OrdinalIgnoreCase))
             {
                 result.Errors.Add($"Post text contains forbidden phrase: {phrase}.");
             }
+        }
+
+        foreach (var warning in quality.Warnings.Where(warning => warning is "Opening sounds templated"))
+        {
+            result.Errors.Add(warning + ".");
         }
 
         return result;

@@ -32,7 +32,9 @@ public static class AppOptionEnvironmentMapper
             ["ConfidenceThreshold"] = Environment.GetEnvironmentVariable("CONFIDENCE_THRESHOLD"),
             ["DuplicateLookbackDays"] = Environment.GetEnvironmentVariable("DUPLICATE_LOOKBACK_DAYS"),
             ["PostLookbackDays"] = Environment.GetEnvironmentVariable("POST_LOOKBACK_DAYS"),
-            ["NewsWindowHours"] = Environment.GetEnvironmentVariable("NEWS_WINDOW_HOURS")
+            ["NewsWindowHours"] = Environment.GetEnvironmentVariable("NEWS_WINDOW_HOURS"),
+            ["LinkedInTone"] = Environment.GetEnvironmentVariable("LINKEDIN_TONE"),
+            ["AttributionFooterLine"] = Environment.GetEnvironmentVariable("ATTRIBUTION_FOOTER_LINE")
         };
 
         configurationBuilder.AddInMemoryCollection(values.Where(item => !string.IsNullOrWhiteSpace(item.Value))!);

@@ -190,6 +190,47 @@ public sealed class NewsPipelineService : INewsPipelineService
         return curatedCount;
     }
 
+    public async Task<int> RegenerateExistingDraftsAsync(string requestedBy, CancellationToken cancellationToken)
+    {
+        var drafts = await _postDraftRepository.GetAllEditableAsync(cancellationToken);
+        var regeneratedCount = 0;
+
+        foreach (var draft in drafts)
+        {
+            var newsItem = await _newsItemRepository.GetByIdAsync(draft.NewsItemId, cancellationToken);
+            if (newsItem is null)
+            {
+                continue;
+            }
+
+            var evaluation = await _aiCurationService.EvaluateNewsAsync(newsItem, cancellationToken);
+            await CreateAndPersistCurationResultAsync(newsItem, evaluation, cancellationToken);
+            var generatedPost = evaluation.LinkedInDraft;
+            var editorialDraft = await ApplyEditorialMetadataAsync(newsItem, generatedPost, cancellationToken);
+            generatedPost = LinkedInEditorialPostFormatter.BuildPostText(editorialDraft);
+            var validation = await _aiCurationService.ValidatePostAsync(newsItem, generatedPost, cancellationToken);
+
+            draft.TitleSuggestion = !string.IsNullOrWhiteSpace(evaluation.LinkedInTitleSuggestion)
+                ? evaluation.LinkedInTitleSuggestion
+                : editorialDraft.Headline;
+            draft.PostText = generatedPost;
+            draft.Tone = _options.LinkedInTone;
+            draft.ValidationErrorsJson = JsonSerializer.Serialize(validation.Errors);
+
+            if (draft.Status == DraftStatus.Approved && !validation.IsValid)
+            {
+                draft.Status = DraftStatus.PendingApproval;
+                draft.ApprovedAt = null;
+                draft.ApprovedBy = null;
+            }
+
+            await _postDraftRepository.UpdateAsync(draft, cancellationToken);
+            regeneratedCount++;
+        }
+
+        return regeneratedCount;
+    }
+
     public async Task<bool> ReprocessNewsItemAsync(long newsItemId, string requestedBy, CancellationToken cancellationToken)
     {
         var newsItem = await _newsItemRepository.GetByIdAsync(newsItemId, cancellationToken);
@@ -227,7 +268,7 @@ public sealed class NewsPipelineService : INewsPipelineService
 
         var evaluation = await _aiCurationService.EvaluateNewsAsync(newsItem, cancellationToken);
         var curationResult = await CreateAndPersistCurationResultAsync(newsItem, evaluation, cancellationToken);
-        var draftId = await CreateDraftAsync(newsItem, curationResult, evaluation.LinkedInDraft, requestedBy, forcePendingApproval: true, cancellationToken);
+        var draftId = await CreateDraftAsync(newsItem, curationResult, evaluation.LinkedInDraft, evaluation.LinkedInTitleSuggestion, requestedBy, forcePendingApproval: true, cancellationToken);
 
         _logger.LogInformation("Created manual draft {DraftId} for NewsItemId={NewsItemId}", draftId, newsItemId);
         return draftId > 0;
@@ -344,7 +385,7 @@ public sealed class NewsPipelineService : INewsPipelineService
             return false;
         }
 
-        await CreateDraftAsync(newsItem, curationResult, evaluation.LinkedInDraft, initiatedBy, forcePendingApproval: false, cancellationToken);
+        await CreateDraftAsync(newsItem, curationResult, evaluation.LinkedInDraft, evaluation.LinkedInTitleSuggestion, initiatedBy, forcePendingApproval: false, cancellationToken);
         return true;
     }
 
@@ -371,10 +412,12 @@ public sealed class NewsPipelineService : INewsPipelineService
         return curationResult;
     }
 
+
     private async Task<long> CreateDraftAsync(
         NewsItem newsItem,
         CurationResult curationResult,
         string? providedDraft,
+        string? providedTitleSuggestion,
         string initiatedBy,
         bool forcePendingApproval,
         CancellationToken cancellationToken)
@@ -383,7 +426,8 @@ public sealed class NewsPipelineService : INewsPipelineService
             ? await _aiCurationService.GenerateLinkedInPostAsync(newsItem, curationResult, cancellationToken)
             : providedDraft;
 
-        generatedPost = await AppendAttributionFooterAsync(newsItem, generatedPost, cancellationToken);
+        var editorialDraft = await ApplyEditorialMetadataAsync(newsItem, generatedPost, cancellationToken);
+        generatedPost = LinkedInEditorialPostFormatter.BuildPostText(editorialDraft);
         var validation = await _aiCurationService.ValidatePostAsync(newsItem, generatedPost, cancellationToken);
 
         var draftStatus = DraftStatus.PendingApproval;
@@ -398,9 +442,11 @@ public sealed class NewsPipelineService : INewsPipelineService
         var draft = new PostDraft
         {
             NewsItemId = newsItem.Id,
-            TitleSuggestion = newsItem.Title,
+            TitleSuggestion = !string.IsNullOrWhiteSpace(providedTitleSuggestion)
+                ? providedTitleSuggestion
+                : editorialDraft.Headline,
             PostText = generatedPost,
-            Tone = "Professional",
+            Tone = _options.LinkedInTone,
             Status = draftStatus,
             ValidationErrorsJson = JsonSerializer.Serialize(validation.Errors),
             CreatedAt = DateTimeOffset.UtcNow
@@ -417,16 +463,33 @@ public sealed class NewsPipelineService : INewsPipelineService
         return draftId;
     }
 
-    private async Task<string> AppendAttributionFooterAsync(NewsItem newsItem, string generatedPost, CancellationToken cancellationToken)
+    private async Task<LinkedInEditorialDraft> ApplyEditorialMetadataAsync(NewsItem newsItem, string generatedPost, CancellationToken cancellationToken)
     {
+        var parsedDraft = LinkedInEditorialPostFormatter.Parse(generatedPost);
         var source = await _sourceRepository.GetByIdAsync(newsItem.SourceId, cancellationToken);
-        var sourceName = source?.Name ?? "original source";
-        var footer =
-            $"{Environment.NewLine}{Environment.NewLine}Source: {sourceName} ({newsItem.CanonicalUrl})" +
-            $"{Environment.NewLine}Curated by: AI News Curator";
+        var sourceName = source?.Name ?? "Original source";
 
-        return generatedPost.Contains("Source:", StringComparison.OrdinalIgnoreCase)
-            ? generatedPost
-            : generatedPost.TrimEnd() + footer;
+        return LinkedInEditorialRefiner.Refine(new LinkedInEditorialDraft
+        {
+            Headline = !string.IsNullOrWhiteSpace(parsedDraft.Headline)
+                ? parsedDraft.Headline
+                : newsItem.Title,
+            Hook = !string.IsNullOrWhiteSpace(parsedDraft.Hook)
+                ? parsedDraft.Hook
+                : $"A noteworthy AI development: {newsItem.Title}",
+            WhatHappened = !string.IsNullOrWhiteSpace(parsedDraft.WhatHappened)
+                ? parsedDraft.WhatHappened
+                : (newsItem.RawSummary ?? newsItem.Title),
+            WhyItMatters = !string.IsNullOrWhiteSpace(parsedDraft.WhyItMatters)
+                ? parsedDraft.WhyItMatters
+                : "The story has practical implications for teams assessing where AI can improve execution, quality, or competitiveness.",
+            StrategicTakeaway = !string.IsNullOrWhiteSpace(parsedDraft.StrategicTakeaway)
+                ? parsedDraft.StrategicTakeaway
+                : "The broader signal is that AI decisions are becoming more strategic and less experimental.",
+            SourceLabel = sourceName,
+            Signature = string.IsNullOrWhiteSpace(_options.AttributionFooterLine)
+                ? "Curated by AI News Curator."
+                : _options.AttributionFooterLine
+        });
     }
 }

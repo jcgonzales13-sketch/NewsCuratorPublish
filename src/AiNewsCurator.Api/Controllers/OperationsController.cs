@@ -91,7 +91,7 @@ public sealed class OperationsController : Controller
     }
 
     [HttpGet("/ops")]
-    public async Task<IActionResult> Index(CancellationToken cancellationToken)
+    public async Task<IActionResult> Index([FromQuery] string? sort = null, [FromQuery] string? preview = null, CancellationToken cancellationToken = default)
     {
         var drafts = await _postDraftRepository.GetPendingApprovalAsync(cancellationToken);
         var runs = await _executionRunRepository.GetRecentAsync(10, cancellationToken);
@@ -117,19 +117,22 @@ public sealed class OperationsController : Controller
         foreach (var item in news)
         {
             var latestCuration = await _curationResultRepository.GetLatestByNewsItemIdAsync(item.Id, cancellationToken);
+            var draftsByNewsItem = await _postDraftRepository.GetByNewsItemIdAsync(item.Id, cancellationToken);
+            var latestLinkedInPublication = await GetLatestLinkedInPublicationAsync(draftsByNewsItem, cancellationToken);
             newsItems.Add(new OperationsNewsItemViewModel
             {
                 NewsItem = item,
                 LatestCuration = latestCuration,
-                SourceName = sourceMap.TryGetValue(item.SourceId, out var sourceName) ? sourceName : null
+                SourceName = sourceMap.TryGetValue(item.SourceId, out var sourceName) ? sourceName : null,
+                IsPublishedToLinkedIn = latestLinkedInPublication?.Status == PublicationStatus.Published,
+                LinkedInPublishedAt = latestLinkedInPublication?.PublishedAt,
+                LinkedInPostId = latestLinkedInPublication?.PlatformPostId
             });
         }
 
-        newsItems = newsItems
-            .OrderByDescending(item => item.LatestCuration?.RelevanceScore ?? double.MinValue)
-            .ThenByDescending(item => item.LatestCuration?.ConfidenceScore ?? double.MinValue)
-            .ThenByDescending(item => item.NewsItem.PublishedAt)
-            .ToList();
+        var selectedSort = NormalizeSort(sort);
+        var previewMode = NormalizePreviewMode(preview);
+        newsItems = SortNewsItems(newsItems, selectedSort);
 
         return View(new OperationsDashboardViewModel
         {
@@ -137,6 +140,8 @@ public sealed class OperationsController : Controller
             Runs = runs,
             Sources = sources.OrderByDescending(source => source.IsActive).ThenByDescending(source => source.Priority).ToList(),
             NewsItems = newsItems,
+            NewsSort = selectedSort,
+            PreviewMode = previewMode,
             LinkedInStatus = linkedInStatus,
             FlashMessage = TempData["FlashMessage"] as string,
             FlashIsError = string.Equals(TempData["FlashType"] as string, "error", StringComparison.Ordinal),
@@ -177,7 +182,8 @@ public sealed class OperationsController : Controller
     {
         var itemsNormalized = await _newsItemRepository.NormalizeStoredContentAsync(cancellationToken);
         var imagesEnriched = await _newsImageEnrichmentService.BackfillMissingImagesAsync(cancellationToken);
-        SetFlash($"Normalization completed for {itemsNormalized} news items. Images enriched: {imagesEnriched}.");
+        var draftsRegenerated = await _pipelineService.RegenerateExistingDraftsAsync("ops-normalize", cancellationToken);
+        SetFlash($"Normalization completed for {itemsNormalized} news items. Images enriched: {imagesEnriched}. Drafts regenerated: {draftsRegenerated}.");
         return RedirectToAction(nameof(Index));
     }
 
@@ -285,6 +291,68 @@ public sealed class OperationsController : Controller
     {
         TempData["FlashMessage"] = message;
         TempData["FlashType"] = isError ? "error" : "success";
+    }
+
+    private async Task<Domain.Entities.Publication?> GetLatestLinkedInPublicationAsync(
+        IReadOnlyList<Domain.Entities.PostDraft> drafts,
+        CancellationToken cancellationToken)
+    {
+        Domain.Entities.Publication? latestPublication = null;
+
+        foreach (var draft in drafts)
+        {
+            var publication = await _publicationRepository.GetLatestByDraftIdAsync(draft.Id, cancellationToken);
+            if (publication is null || !string.Equals(publication.Platform, "LinkedIn", StringComparison.OrdinalIgnoreCase))
+            {
+                continue;
+            }
+
+            if (latestPublication is null ||
+                publication.PublishedAt.GetValueOrDefault() > latestPublication.PublishedAt.GetValueOrDefault() ||
+                publication.Id > latestPublication.Id)
+            {
+                latestPublication = publication;
+            }
+        }
+
+        return latestPublication;
+    }
+
+    private static string NormalizeSort(string? sort)
+    {
+        return sort?.Trim().ToLowerInvariant() switch
+        {
+            "date" => "date",
+            "source" => "source",
+            _ => "relevance"
+        };
+    }
+
+    private static string NormalizePreviewMode(string? preview)
+    {
+        return string.Equals(preview, "feed", StringComparison.OrdinalIgnoreCase)
+            ? "feed"
+            : "editorial";
+    }
+
+    private static List<OperationsNewsItemViewModel> SortNewsItems(IEnumerable<OperationsNewsItemViewModel> items, string sort)
+    {
+        return sort switch
+        {
+            "date" => items
+                .OrderByDescending(item => item.NewsItem.PublishedAt)
+                .ThenByDescending(item => item.NewsItem.Id)
+                .ToList(),
+            "source" => items
+                .OrderBy(item => item.SourceName ?? string.Empty, StringComparer.OrdinalIgnoreCase)
+                .ThenByDescending(item => item.NewsItem.PublishedAt)
+                .ToList(),
+            _ => items
+                .OrderByDescending(item => item.LatestCuration?.RelevanceScore ?? double.MinValue)
+                .ThenByDescending(item => item.LatestCuration?.ConfidenceScore ?? double.MinValue)
+                .ThenByDescending(item => item.NewsItem.PublishedAt)
+                .ToList()
+        };
     }
 
     private static string SanitizeReturnUrl(string? returnUrl)

@@ -75,6 +75,7 @@ public sealed class PipelineIntegrationTests : IAsyncLifetime
                 WhyRelevant = "Impacta times de tecnologia e produto.",
                 Summary = "Resumo factual.",
                 KeyPoints = ["Ponto 1", "Ponto 2"],
+                LinkedInTitleSuggestion = "OpenAI pushes agent workflows into execution",
                 LinkedInDraft = "Uma noticia recente sobre IA mostra avancos em agentes para software com impacto real em operacao e produtividade."
             });
 
@@ -121,6 +122,7 @@ public sealed class PipelineIntegrationTests : IAsyncLifetime
                 WhyRelevant = "Tem impacto de negocio.",
                 Summary = "Resumo factual.",
                 KeyPoints = ["Ponto 1"],
+                LinkedInTitleSuggestion = "Google expands enterprise AI deployment",
                 LinkedInDraft = "Uma noticia recente sobre IA destaca a expansao de tooling corporativo com impacto concreto para times de negocio e tecnologia."
             });
 
@@ -165,6 +167,7 @@ public sealed class PipelineIntegrationTests : IAsyncLifetime
                 WhyRelevant = "Impacta times de desenvolvimento.",
                 Summary = "Resumo factual.",
                 KeyPoints = ["Ponto 1"],
+                LinkedInTitleSuggestion = "Anthropic broadens developer AI tooling",
                 LinkedInDraft = "Uma noticia recente sobre IA mostra uma ampliacao relevante de tooling para desenvolvedores, com efeito pratico em fluxos de entrega."
             });
 
@@ -177,6 +180,52 @@ public sealed class PipelineIntegrationTests : IAsyncLifetime
 
         Assert.True(reprocessed);
         Assert.Equal(2, draftCount);
+    }
+
+    [Fact]
+    public async Task Regenerate_Existing_Drafts_Should_Refresh_Old_Draft_Format()
+    {
+        var pipeline = CreatePipeline(
+            publishMode: "Manual",
+            collectedItems:
+            [
+                new CollectedNewsItem
+                {
+                    ExternalId = "item-regenerate",
+                    Title = "Anthropic expands automation tooling",
+                    Url = "https://example.com/news/anthropic-automation",
+                    CanonicalUrl = "https://example.com/news/anthropic-automation",
+                    PublishedAt = DateTimeOffset.UtcNow,
+                    Language = "en",
+                    RawSummary = "Anthropic expanded tooling so agents can act more directly in user workflows.",
+                    RawContent = "Anthropic expanded tooling so agents can act more directly in user workflows."
+                }
+            ],
+            aiResult: new AiEvaluationResult
+            {
+                IsRelevant = true,
+                RelevanceScore = 0.91,
+                ConfidenceScore = 0.87,
+                Category = "Agents",
+                WhyRelevant = "Impacta operacao e produto.",
+                Summary = "Resumo factual.",
+                KeyPoints = ["Ponto 1"],
+                LinkedInTitleSuggestion = "Anthropic pushes AI closer to execution",
+                LinkedInDraft = "Legacy summary draft without editorial sections but with AI context for teams."
+            });
+
+        await pipeline.RunCollectAsync(new TriggerContext { TriggerType = TriggerType.Manual, InitiatedBy = "test" }, CancellationToken.None);
+        await pipeline.RunCurateAsync(new TriggerContext { TriggerType = TriggerType.Manual, InitiatedBy = "test" }, CancellationToken.None);
+
+        var regenerated = await pipeline.RegenerateExistingDraftsAsync("test-normalize", CancellationToken.None);
+        var postText = await ExecuteStringScalarAsync("SELECT PostText FROM PostDrafts ORDER BY Id DESC LIMIT 1", null);
+        var title = await ExecuteStringScalarAsync("SELECT TitleSuggestion FROM PostDrafts ORDER BY Id DESC LIMIT 1", null);
+
+        Assert.Equal(1, regenerated);
+        Assert.Contains("What happened:", postText);
+        Assert.Contains("Why it matters:", postText);
+        Assert.Contains("Strategic takeaway:", postText);
+        Assert.Equal("Anthropic pushes AI closer to execution", title);
     }
 
     [Fact]
@@ -298,6 +347,19 @@ public sealed class PipelineIntegrationTests : IAsyncLifetime
         }
 
         return Convert.ToInt64(await command.ExecuteScalarAsync(CancellationToken.None));
+    }
+
+    private async Task<string> ExecuteStringScalarAsync(string sql, (string Name, object Value)? parameter)
+    {
+        await using var connection = await _connectionFactory.OpenAsync(CancellationToken.None);
+        await using var command = connection.CreateCommand();
+        command.CommandText = sql;
+        if (parameter.HasValue)
+        {
+            command.Parameters.AddWithValue(parameter.Value.Name, parameter.Value.Value);
+        }
+
+        return Convert.ToString(await command.ExecuteScalarAsync(CancellationToken.None)) ?? string.Empty;
     }
 
     private sealed class FakeCollector : INewsCollector

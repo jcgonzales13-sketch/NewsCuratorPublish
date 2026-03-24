@@ -6,7 +6,7 @@
 <div class="topbar">
     <div class="brand">
         <h1>AI News Curator</h1>
-        <p>Minimal dashboard for daily operations, draft review, and source management.</p>
+        <p>Editorial workspace for daily operations, draft review, and source management.</p>
     </div>
 
     <form method="post" asp-action="Logout">
@@ -83,7 +83,11 @@
             <div class="toolbar">
                 <div>
                     <h2 style="margin-bottom: 6px;">Drafts for review</h2>
-                    <div class="muted">Pending and approved drafts appear here to support manual publishing.</div>
+                    <div class="muted">Sharper editorial structure, quality analysis, and a LinkedIn feed preview.</div>
+                </div>
+                <div class="preview-switch">
+                    <a href="/ops?sort=@Model.NewsSort&preview=editorial" class="button-link @(Model.PreviewMode == "editorial" ? string.Empty : "secondary")">Editorial preview</a>
+                    <a href="/ops?sort=@Model.NewsSort&preview=feed" class="button-link @(Model.PreviewMode == "feed" ? string.Empty : "secondary")">LinkedIn feed preview</a>
                 </div>
             </div>
 
@@ -97,25 +101,34 @@
                     @foreach (var draftItem in Model.Drafts)
                     {
                         var draft = draftItem.Draft;
+                        var editorial = draftItem.EditorialDraft;
+                        var quality = draftItem.QualityAnalysis;
                         <article class="item">
                             <div class="item-header">
                                 <div>
                                     <h3>@(string.IsNullOrWhiteSpace(draft.TitleSuggestion) ? $"Draft #{draft.Id}" : draft.TitleSuggestion)</h3>
                                     <div class="muted">
-                                        News item #@draft.NewsItemId • created at @draft.CreatedAt.LocalDateTime.ToString("dd/MM/yyyy HH:mm")
+                                        Story #@draft.NewsItemId • prepared @draft.CreatedAt.LocalDateTime.ToString("dd/MM/yyyy HH:mm")
                                         @if (!string.IsNullOrWhiteSpace(draftItem.SourceName))
                                         {
                                             <text> • source @draftItem.SourceName</text>
                                         }
                                     </div>
+                                    <div class="meta-row">
+                                        <span class="badge neutral">@draft.Tone tone</span>
+                                        <span class="badge neutral">readability @quality.ReadabilityScore</span>
+                                        <span class="badge neutral">hook @((editorial.HookType ?? "selected").Replace("_", " "))</span>
+                                        <span class="badge @(draftItem.IsReadyToPublish ? "success" : "warning")">@draftItem.ReadinessLabel</span>
+                                        <span class="badge neutral">@draftItem.CharacterCount chars</span>
+                                    </div>
                                 </div>
                                 <span class="badge">@draft.Status</span>
                             </div>
 
-                            <div style="margin-bottom: 14px;">
+                            <div style="margin: 14px 0;">
                                 <div class="muted" style="margin-bottom: 8px;">
-                                    <strong>Post image preview:</strong>
-                                    @(draftItem.HasPostImage ? " this image will be used when LinkedIn accepts image publishing." : " this post will be published as text-only unless an image is captured.")
+                                    <strong>Visual asset:</strong>
+                                    @(draftItem.HasPostImage ? " cover image available for future image-enabled LinkedIn publishing." : " text-first post with no supporting image captured.")
                                 </div>
 
                                 @if (draftItem.HasPostImage)
@@ -127,12 +140,86 @@
                                 }
                             </div>
 
-                            <p style="white-space: pre-wrap;">@draft.PostText</p>
+                            @if (Model.PreviewMode == "feed")
+                            {
+                                <div class="feed-preview">
+                                    <div class="feed-body"><strong>@editorial.Headline</strong>@editorial.Hook
+
+@editorial.WhatHappened
+
+@editorial.WhyItMatters
+
+@editorial.StrategicTakeaway
+
+Source: @editorial.SourceLabel
+@editorial.Signature</div>
+                                </div>
+                            }
+                            else
+                            {
+                                <div class="editorial-preview">
+                                    <div class="editorial-block">
+                                        <h4>Headline</h4>
+                                        <p class="editorial-headline">@editorial.Headline</p>
+                                    </div>
+                                    <div class="editorial-block">
+                                        <h4>Opening angle</h4>
+                                        <p class="editorial-hook">@editorial.Hook</p>
+                                    </div>
+                                    <div class="editorial-block">
+                                        <h4>What happened</h4>
+                                        <p>@editorial.WhatHappened</p>
+                                    </div>
+                                    <div class="editorial-block">
+                                        <h4>Why it matters</h4>
+                                        <p>@editorial.WhyItMatters</p>
+                                    </div>
+                                    <div class="editorial-block">
+                                        <h4>Strategic takeaway</h4>
+                                        <p>@editorial.StrategicTakeaway</p>
+                                    </div>
+                                    <div class="editorial-block">
+                                        <h4>Source</h4>
+                                        <p>@editorial.SourceLabel</p>
+                                        @if (!string.IsNullOrWhiteSpace(editorial.Signature))
+                                        {
+                                            <p class="muted" style="margin-top: 8px;">@editorial.Signature</p>
+                                        }
+                                        @if (!string.IsNullOrWhiteSpace(draftItem.SourceUrl))
+                                        {
+                                            <div style="margin-top: 10px;">
+                                                <a href="@draftItem.SourceUrl" target="_blank" rel="noreferrer" class="button-link secondary">Open original article</a>
+                                            </div>
+                                        }
+                                    </div>
+                                </div>
+                            }
+
+                            @if (quality.Warnings.Count > 0)
+                            {
+                                <div class="flash error">
+                                    <strong>Quality warnings:</strong>
+                                    <ul class="warning-list">
+                                        @foreach (var warning in quality.Warnings)
+                                        {
+                                            <li>@warning</li>
+                                        }
+                                    </ul>
+                                </div>
+                            }
+
+                            @if (draftItem.ValidationErrors.Count > 0)
+                            {
+                                <div class="flash error">
+                                    <strong>Editorial review notes:</strong>
+                                    <div style="margin-top: 8px; white-space: pre-wrap;">@string.Join(Environment.NewLine, draftItem.ValidationErrors)</div>
+                                </div>
+                            }
 
                             @if (draftItem.LatestPublication?.Status == AiNewsCurator.Domain.Enums.PublicationStatus.Failed)
                             {
                                 <div class="flash error">
-                                    <strong>Latest publication failure:</strong>
+                                    <strong>Latest publication attempt failed:</strong>
                                     <div style="margin-top: 8px; white-space: pre-wrap;">@(draftItem.LatestPublication.ErrorMessage ?? draftItem.LatestPublication.ResponsePayload)</div>
                                 </div>
                             }
@@ -174,8 +261,23 @@
         </section>
 
         <section class="card">
-            <h2 style="margin-bottom: 6px;">Recent news</h2>
-            <div class="muted" style="margin-bottom: 14px;">Quick view of what was collected and why it was accepted or rejected.</div>
+            <div class="toolbar">
+                <div>
+                    <h2 style="margin-bottom: 6px;">Recent news</h2>
+                    <div class="muted">Quick view of what was collected and why it was accepted or rejected.</div>
+                </div>
+                <form method="get" action="/ops" style="display: flex; align-items: end; gap: 10px;">
+                    <input type="hidden" name="preview" value="@Model.PreviewMode" />
+                    <label style="margin: 0;">
+                        Sort by
+                        <select name="sort" onchange="this.form.submit()">
+                            <option value="relevance" selected="@(Model.NewsSort == "relevance")">Relevance</option>
+                            <option value="date" selected="@(Model.NewsSort == "date")">Date</option>
+                            <option value="source" selected="@(Model.NewsSort == "source")">Source</option>
+                        </select>
+                    </label>
+                </form>
+            </div>
 
             <div class="list">
                 @foreach (var item in Model.NewsItems)
@@ -196,6 +298,20 @@
                             </div>
                             <a href="@item.NewsItem.CanonicalUrl" target="_blank" rel="noreferrer" class="button-link secondary">Open article</a>
                         </div>
+
+                        @if (item.IsPublishedToLinkedIn)
+                        {
+                            <div class="flash success" style="margin-bottom: 14px;">
+                                <strong>Published on LinkedIn:</strong>
+                                <div style="margin-top: 8px;">
+                                    @item.LinkedInPublishedAt?.LocalDateTime.ToString("dd/MM/yyyy HH:mm")
+                                    @if (!string.IsNullOrWhiteSpace(item.LinkedInPostId))
+                                    {
+                                        <text> • post id @item.LinkedInPostId</text>
+                                    }
+                                </div>
+                            </div>
+                        }
 
                         @if (item.LatestCuration is not null)
                         {

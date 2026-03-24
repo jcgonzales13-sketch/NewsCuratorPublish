@@ -58,6 +58,23 @@ public sealed class PostDraftRepository : IPostDraftRepository
         return items;
     }
 
+    public async Task<IReadOnlyList<PostDraft>> GetAllEditableAsync(CancellationToken cancellationToken)
+    {
+        await using var connection = await _connectionFactory.OpenAsync(cancellationToken);
+        await using var command = connection.CreateCommand();
+        command.CommandText = "SELECT * FROM PostDrafts WHERE Status <> @Published ORDER BY CreatedAt DESC, Id DESC";
+        command.Parameters.AddWithValue("@Published", (int)DraftStatus.Published);
+
+        var items = new List<PostDraft>();
+        await using var reader = await command.ExecuteReaderAsync(cancellationToken);
+        while (await reader.ReadAsync(cancellationToken))
+        {
+            items.Add(Map(reader));
+        }
+
+        return items;
+    }
+
     public async Task<IReadOnlyList<PostDraft>> GetPendingApprovalAsync(CancellationToken cancellationToken)
     {
         await using var connection = await _connectionFactory.OpenAsync(cancellationToken);

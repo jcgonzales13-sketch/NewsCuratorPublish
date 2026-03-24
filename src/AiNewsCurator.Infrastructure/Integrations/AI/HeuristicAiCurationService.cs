@@ -42,6 +42,7 @@ public sealed class HeuristicAiCurationService : IAiCurationService
             WhyRelevant = "This story is relevant to technology and business professionals because it signals a meaningful AI development with practical implications.",
             Summary = newsItem.RawSummary ?? newsItem.Title,
             KeyPoints = keyPoints,
+            LinkedInTitleSuggestion = BuildEditorialDraft(newsItem).Headline,
             LinkedInDraft = BuildDraft(newsItem),
             PromptVersion = "heuristic-v1",
             ModelName = "local-heuristic",
@@ -82,11 +83,25 @@ public sealed class HeuristicAiCurationService : IAiCurationService
 
     private static string BuildDraft(NewsItem newsItem)
     {
-        var baseSummary = newsItem.RawSummary ?? newsItem.Title;
-        return
-            $"One AI story that stood out today is {newsItem.Title}. " +
-            $"At a practical level, the key takeaway is this: {baseSummary}. " +
-            "What makes this relevant is not just the announcement itself, but the broader signal it sends for product strategy, operational priorities, and competitive positioning. " +
-            "This is the kind of development worth tracking closely over the next few weeks.";
+        return LinkedInEditorialPostFormatter.BuildPostText(BuildEditorialDraft(newsItem));
+    }
+
+    private static LinkedInEditorialDraft BuildEditorialDraft(NewsItem newsItem)
+    {
+        var title = LinkedInEditorialPostFormatter.SanitizeSentence(newsItem.Title, 90);
+        var summary = LinkedInEditorialPostFormatter.SanitizeSentence(newsItem.RawSummary ?? newsItem.Title, 220);
+        var draft = new LinkedInEditorialDraft
+        {
+            Headline = title,
+            Hook = "The bigger story here is how quickly AI products are moving toward real execution inside everyday workflows.",
+            HookType = "market_signal",
+            WhatHappened = summary,
+            WhyItMatters = "This moves AI closer to workflow execution instead of just assistance. That matters because teams can judge task completion and operational automation in real environments.",
+            StrategicTakeaway = "The real shift is that AI is becoming an execution layer inside workflows, not just a conversational layer on top of them.",
+            SourceLabel = "Original reporting",
+            Signature = "Curated by AI News Curator."
+        };
+
+        return LinkedInEditorialRefiner.Refine(draft);
     }
 }

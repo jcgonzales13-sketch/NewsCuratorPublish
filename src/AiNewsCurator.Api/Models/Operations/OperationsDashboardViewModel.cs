@@ -11,6 +11,8 @@ public sealed class OperationsDashboardViewModel
     public IReadOnlyList<OperationsNewsItemViewModel> NewsItems { get; init; } = [];
     public LinkedInAuthState LinkedInStatus { get; init; } = new();
     public CreateSourceFormModel CreateSource { get; init; } = new();
+    public string NewsSort { get; init; } = "relevance";
+    public string PreviewMode { get; init; } = "editorial";
     public string? FlashMessage { get; init; }
     public bool FlashIsError { get; init; }
 

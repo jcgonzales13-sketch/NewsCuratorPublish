@@ -9,6 +9,7 @@ public sealed class AiEvaluationResult
     public string WhyRelevant { get; init; } = string.Empty;
     public string Summary { get; init; } = string.Empty;
     public IReadOnlyList<string> KeyPoints { get; init; } = Array.Empty<string>();
+    public string LinkedInTitleSuggestion { get; init; } = string.Empty;
     public string LinkedInDraft { get; init; } = string.Empty;
     public string PromptVersion { get; init; } = string.Empty;
     public string ModelName { get; init; } = string.Empty;

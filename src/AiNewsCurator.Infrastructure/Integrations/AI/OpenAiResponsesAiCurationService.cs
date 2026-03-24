@@ -25,7 +25,7 @@ public sealed class OpenAiResponsesAiCurationService : IAiCurationService
         var requestPayload = new
         {
             model = _options.AiModelName,
-            input = OpenAiPromptFactory.BuildEvaluationInput(newsItem),
+            input = OpenAiPromptFactory.BuildEvaluationInput(newsItem, _options.LinkedInTone),
             text = OpenAiPromptFactory.BuildStructuredTextFormat()
         };
 
@@ -33,6 +33,18 @@ public sealed class OpenAiResponsesAiCurationService : IAiCurationService
         var outputText = OpenAiResponseParser.ExtractOutputText(rawResponse);
         var structured = JsonSerializer.Deserialize<AiStructuredOutput>(outputText, JsonOptions()) ??
                          throw new InvalidOperationException("Unable to parse structured OpenAI output.");
+        var editorialDraft = new LinkedInEditorialDraft
+        {
+            Headline = LinkedInEditorialPostFormatter.SanitizeSentence(structured.Headline, 90),
+            Hook = LinkedInEditorialPostFormatter.SanitizeSentence(structured.Hook, 180),
+            HookType = LinkedInEditorialPostFormatter.SanitizeSentence(structured.HookType, 40),
+            WhatHappened = LinkedInEditorialPostFormatter.SanitizeSentence(structured.WhatHappened, 280),
+            WhyItMatters = LinkedInEditorialPostFormatter.SanitizeSentence(structured.WhyItMatters, 280),
+            StrategicTakeaway = LinkedInEditorialPostFormatter.SanitizeSentence(structured.StrategicTakeaway, 180),
+            SourceLabel = LinkedInEditorialPostFormatter.SanitizeSentence(structured.SourceLabel, 80),
+            Signature = LinkedInEditorialPostFormatter.SanitizeSentence(structured.Signature, 80)
+        };
+        editorialDraft = LinkedInEditorialRefiner.Refine(editorialDraft);
 
         return new AiEvaluationResult
         {
@@ -43,7 +55,8 @@ public sealed class OpenAiResponsesAiCurationService : IAiCurationService
             WhyRelevant = structured.WhyRelevant,
             Summary = structured.Summary,
             KeyPoints = structured.KeyPoints,
-            LinkedInDraft = structured.LinkedInDraft,
+            LinkedInTitleSuggestion = editorialDraft.Headline,
+            LinkedInDraft = LinkedInEditorialPostFormatter.BuildPostText(editorialDraft),
             PromptVersion = "openai-responses-v1",
             ModelName = _options.AiModelName,
             PromptPayload = JsonSerializer.Serialize(requestPayload),

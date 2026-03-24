@@ -25,4 +25,6 @@ public sealed class AppOptions
     public int DuplicateLookbackDays { get; set; } = 14;
     public int PostLookbackDays { get; set; } = 15;
     public int NewsWindowHours { get; set; } = 48;
+    public string LinkedInTone { get; set; } = "Editorial";
+    public string AttributionFooterLine { get; set; } = "Curated by AI News Curator.";
 }
