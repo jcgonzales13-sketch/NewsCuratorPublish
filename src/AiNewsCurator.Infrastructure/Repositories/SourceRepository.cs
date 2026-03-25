@@ -122,12 +122,15 @@ public sealed class SourceRepository : ISourceRepository
     public async Task SeedDefaultsAsync(CancellationToken cancellationToken)
     {
         await using var connection = await _connectionFactory.OpenAsync(cancellationToken);
-        await using var countCommand = connection.CreateCommand();
-        countCommand.CommandText = "SELECT COUNT(*) FROM Sources";
-        var count = Convert.ToInt32(await countCommand.ExecuteScalarAsync(cancellationToken));
-        if (count > 0)
+        var existingUrls = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+        await using (var existingCommand = connection.CreateCommand())
         {
-            return;
+            existingCommand.CommandText = "SELECT Url FROM Sources";
+            await using var reader = await existingCommand.ExecuteReaderAsync(cancellationToken);
+            while (await reader.ReadAsync(cancellationToken))
+            {
+                existingUrls.Add(reader.GetString(0));
+            }
         }
 
         var defaults = new[]
@@ -157,11 +160,81 @@ public sealed class SourceRepository : ISourceRepository
                 IncludeKeywordsJson = "[\"ai\",\"artificial intelligence\"]",
                 ExcludeKeywordsJson = "[]",
                 TagsJson = "[\"research\"]"
+            },
+            new Source
+            {
+                Name = ".NET Blog",
+                Type = SourceType.Rss,
+                Url = "https://devblogs.microsoft.com/dotnet/feed/",
+                Language = "en",
+                IsActive = true,
+                Priority = 9,
+                MaxItemsPerRun = 10,
+                IncludeKeywordsJson = "[\".net\",\"dotnet\",\"runtime\",\"sdk\",\"asp.net core\",\"c#\"]",
+                ExcludeKeywordsJson = "[]",
+                TagsJson = "[\"dotnet\",\"microsoft\",\"official\"]"
+            },
+            new Source
+            {
+                Name = "C# Category - .NET Blog",
+                Type = SourceType.Rss,
+                Url = "https://devblogs.microsoft.com/dotnet/category/csharp/feed/",
+                Language = "en",
+                IsActive = true,
+                Priority = 9,
+                MaxItemsPerRun = 10,
+                IncludeKeywordsJson = "[\"c#\",\"language\",\"compiler\",\"roslyn\",\"dotnet\"]",
+                ExcludeKeywordsJson = "[]",
+                TagsJson = "[\"dotnet\",\"csharp\",\"microsoft\",\"official\"]"
+            },
+            new Source
+            {
+                Name = "JetBrains .NET Tools Blog",
+                Type = SourceType.Rss,
+                Url = "https://blog.jetbrains.com/dotnet/feed/",
+                Language = "en",
+                IsActive = true,
+                Priority = 8,
+                MaxItemsPerRun = 10,
+                IncludeKeywordsJson = "[\".net\",\"dotnet\",\"rider\",\"resharper\",\"c#\"]",
+                ExcludeKeywordsJson = "[]",
+                TagsJson = "[\"dotnet\",\"csharp\",\"tooling\"]"
+            },
+            new Source
+            {
+                Name = "InfoQ .NET",
+                Type = SourceType.Rss,
+                Url = "https://feed.infoq.com/dotnet/news/",
+                Language = "en",
+                IsActive = true,
+                Priority = 8,
+                MaxItemsPerRun = 10,
+                IncludeKeywordsJson = "[\".net\",\"dotnet\",\"c#\",\"asp.net\",\"blazor\"]",
+                ExcludeKeywordsJson = "[]",
+                TagsJson = "[\"dotnet\",\"news\",\"curated\"]"
+            },
+            new Source
+            {
+                Name = "Visual Studio Magazine",
+                Type = SourceType.Rss,
+                Url = "https://visualstudiomagazine.com/RSS-Feeds/News.aspx",
+                Language = "en",
+                IsActive = true,
+                Priority = 7,
+                MaxItemsPerRun = 10,
+                IncludeKeywordsJson = "[\".net\",\"dotnet\",\"c#\",\"asp.net\",\"visual studio\"]",
+                ExcludeKeywordsJson = "[]",
+                TagsJson = "[\"dotnet\",\"csharp\",\"visualstudio\",\"news\"]"
             }
         };
 
         foreach (var source in defaults)
         {
+            if (existingUrls.Contains(source.Url))
+            {
+                continue;
+            }
+
             await using var insert = connection.CreateCommand();
             insert.CommandText =
                 """
@@ -183,6 +256,7 @@ public sealed class SourceRepository : ISourceRepository
             insert.Parameters.AddWithValue("@CreatedAt", DateTimeOffset.UtcNow.ToString("O"));
             insert.Parameters.AddWithValue("@UpdatedAt", DateTimeOffset.UtcNow.ToString("O"));
             await insert.ExecuteNonQueryAsync(cancellationToken);
+            existingUrls.Add(source.Url);
         }
     }
 
