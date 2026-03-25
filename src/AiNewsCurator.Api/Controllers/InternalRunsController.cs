@@ -125,6 +125,20 @@ public sealed class InternalRunsController : ControllerBase
         return success ? Ok(new { rejected = true }) : NotFound();
     }
 
+    [HttpPost("drafts/{id:long}/dismiss")]
+    public async Task<IActionResult> Dismiss(long id, CancellationToken cancellationToken)
+    {
+        var success = await _pipelineService.DismissDraftAsync(id, "reviewer", cancellationToken);
+        return success ? Ok(new { dismissed = true }) : NotFound();
+    }
+
+    [HttpPost("drafts/{id:long}/reopen")]
+    public async Task<IActionResult> Reopen(long id, CancellationToken cancellationToken)
+    {
+        var success = await _pipelineService.ReopenDraftAsync(id, "reviewer", cancellationToken);
+        return success ? Ok(new { reopened = true }) : NotFound();
+    }
+
     [HttpGet("runs")]
     public async Task<IActionResult> Runs(CancellationToken cancellationToken)
     {

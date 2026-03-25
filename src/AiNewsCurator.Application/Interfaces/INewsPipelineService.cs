@@ -13,4 +13,6 @@ public interface INewsPipelineService
     Task<bool> PublishDraftAsync(long draftId, string approvedBy, CancellationToken cancellationToken);
     Task<bool> ApproveDraftAsync(long draftId, string approvedBy, CancellationToken cancellationToken);
     Task<bool> RejectDraftAsync(long draftId, string approvedBy, CancellationToken cancellationToken);
+    Task<bool> DismissDraftAsync(long draftId, string approvedBy, CancellationToken cancellationToken);
+    Task<bool> ReopenDraftAsync(long draftId, string approvedBy, CancellationToken cancellationToken);
 }

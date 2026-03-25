@@ -1,6 +1,7 @@
 using System.Net.Http.Headers;
 using System.Text;
 using System.Text.Json;
+using System.Text.Json.Serialization;
 using AiNewsCurator.Application.DTOs;
 using AiNewsCurator.Domain.Entities;
 using AiNewsCurator.Domain.Interfaces;
@@ -64,7 +65,7 @@ public sealed class LinkedInPublisher : ILinkedInPublisher
 
     public Task<OperationResult> RefreshAccessAsync(CancellationToken cancellationToken)
     {
-        return Task.FromResult(OperationResult.Failed("Automatic token refresh is not implemented in the MVP."));
+        return RefreshAccessInternalAsync(cancellationToken);
     }
 
     private async Task<OperationResult> ValidateCredentialsInternalAsync(CancellationToken cancellationToken)
@@ -78,21 +79,104 @@ public sealed class LinkedInPublisher : ILinkedInPublisher
         var client = _httpClientFactory.CreateClient("linkedin-auth");
         client.DefaultRequestHeaders.Authorization = new AuthenticationHeaderValue("Bearer", credentials.AccessToken);
         using var response = await client.GetAsync("https://api.linkedin.com/v2/userinfo", cancellationToken);
-        return response.IsSuccessStatusCode
-            ? OperationResult.Ok()
-            : OperationResult.Failed($"LinkedIn credential validation failed with status {(int)response.StatusCode}.");
+        if (response.IsSuccessStatusCode)
+        {
+            return OperationResult.Ok();
+        }
+
+        if (response.StatusCode is System.Net.HttpStatusCode.Unauthorized or System.Net.HttpStatusCode.Forbidden)
+        {
+            var refreshResult = await RefreshAccessInternalAsync(cancellationToken);
+            if (!refreshResult.Success)
+            {
+                return refreshResult;
+            }
+
+            credentials = await GetCredentialsAsync(cancellationToken);
+            if (string.IsNullOrWhiteSpace(credentials.AccessToken))
+            {
+                return OperationResult.Failed("LinkedIn access token refresh did not return a usable access token.");
+            }
+
+            client = _httpClientFactory.CreateClient("linkedin-auth");
+            client.DefaultRequestHeaders.Authorization = new AuthenticationHeaderValue("Bearer", credentials.AccessToken);
+            using var retryResponse = await client.GetAsync("https://api.linkedin.com/v2/userinfo", cancellationToken);
+            if (retryResponse.IsSuccessStatusCode)
+            {
+                return OperationResult.Ok();
+            }
+
+            return OperationResult.Failed($"LinkedIn credential validation failed after refresh with status {(int)retryResponse.StatusCode}.");
+        }
+
+        return OperationResult.Failed($"LinkedIn credential validation failed with status {(int)response.StatusCode}.");
     }
 
     private async Task<LinkedInCredentials> GetCredentialsAsync(CancellationToken cancellationToken)
     {
         var tokenSetting = await _settingsRepository.GetAsync(LinkedInSettingsKeys.AccessToken, cancellationToken);
+        var refreshTokenSetting = await _settingsRepository.GetAsync(LinkedInSettingsKeys.RefreshToken, cancellationToken);
         var memberUrnSetting = await _settingsRepository.GetAsync(LinkedInSettingsKeys.MemberUrn, cancellationToken);
 
         return new LinkedInCredentials
         {
             AccessToken = tokenSetting?.Value ?? _options.LinkedInAccessToken,
+            RefreshToken = refreshTokenSetting?.Value,
             MemberUrn = memberUrnSetting?.Value ?? _options.LinkedInMemberUrn
         };
+    }
+
+    private async Task<OperationResult> RefreshAccessInternalAsync(CancellationToken cancellationToken)
+    {
+        if (string.IsNullOrWhiteSpace(_options.LinkedInClientId) || string.IsNullOrWhiteSpace(_options.LinkedInClientSecret))
+        {
+            return OperationResult.Failed("LinkedIn OAuth client credentials are not configured for token refresh.");
+        }
+
+        var credentials = await GetCredentialsAsync(cancellationToken);
+        if (string.IsNullOrWhiteSpace(credentials.RefreshToken))
+        {
+            return OperationResult.Failed("LinkedIn refresh token is not available.");
+        }
+
+        var client = _httpClientFactory.CreateClient("linkedin-auth");
+        using var response = await client.PostAsync(
+            "https://www.linkedin.com/oauth/v2/accessToken",
+            new FormUrlEncodedContent(new Dictionary<string, string>
+            {
+                ["grant_type"] = "refresh_token",
+                ["refresh_token"] = credentials.RefreshToken,
+                ["client_id"] = _options.LinkedInClientId,
+                ["client_secret"] = _options.LinkedInClientSecret
+            }),
+            cancellationToken);
+
+        var body = await response.Content.ReadAsStringAsync(cancellationToken);
+        if (!response.IsSuccessStatusCode)
+        {
+            _logger.LogWarning(
+                "LinkedIn token refresh failed with status {StatusCode}. Response: {ResponseBody}",
+                response.StatusCode,
+                body);
+            return OperationResult.Failed($"LinkedIn token refresh failed with status {(int)response.StatusCode}: {body}");
+        }
+
+        var tokenResponse = JsonSerializer.Deserialize<LinkedInRefreshTokenResponse>(body, JsonSerializerOptions) ??
+                            throw new InvalidOperationException("Unable to deserialize LinkedIn refresh token response.");
+
+        if (string.IsNullOrWhiteSpace(tokenResponse.AccessToken))
+        {
+            return OperationResult.Failed("LinkedIn token refresh response did not include an access token.");
+        }
+
+        await _settingsRepository.UpsertAsync(LinkedInSettingsKeys.AccessToken, tokenResponse.AccessToken, cancellationToken);
+        if (!string.IsNullOrWhiteSpace(tokenResponse.RefreshToken))
+        {
+            await _settingsRepository.UpsertAsync(LinkedInSettingsKeys.RefreshToken, tokenResponse.RefreshToken, cancellationToken);
+        }
+
+        await _settingsRepository.UpsertAsync(LinkedInSettingsKeys.TokenUpdatedAt, DateTimeOffset.UtcNow.ToString("O"), cancellationToken);
+        return OperationResult.Ok();
     }
 
     private async Task<LinkedInPublishResult> PublishUgcPostAsync(
@@ -322,6 +406,21 @@ public sealed class LinkedInPublisher : ILinkedInPublisher
     private sealed class LinkedInCredentials
     {
         public string? AccessToken { get; init; }
+        public string? RefreshToken { get; init; }
         public string? MemberUrn { get; init; }
+    }
+
+    private static readonly JsonSerializerOptions JsonSerializerOptions = new()
+    {
+        PropertyNameCaseInsensitive = true
+    };
+
+    private sealed class LinkedInRefreshTokenResponse
+    {
+        [JsonPropertyName("access_token")]
+        public string? AccessToken { get; set; }
+
+        [JsonPropertyName("refresh_token")]
+        public string? RefreshToken { get; set; }
     }
 }

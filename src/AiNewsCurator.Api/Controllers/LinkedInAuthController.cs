@@ -37,6 +37,13 @@ public sealed class LinkedInAuthController : ControllerBase
         return result.Success ? Ok(result) : BadRequest(result);
     }
 
+    [HttpPost("refresh")]
+    public async Task<IActionResult> Refresh(CancellationToken cancellationToken)
+    {
+        var result = await _linkedInPublisher.RefreshAccessAsync(cancellationToken);
+        return result.Success ? Ok(result) : BadRequest(result);
+    }
+
     [HttpGet("callback")]
     public async Task<IActionResult> Callback(
         [FromQuery] string? code,

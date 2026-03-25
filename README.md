@@ -52,9 +52,13 @@ dotnet run --project src/AiNewsCurator.Worker
 Tambem existe uma UI operacional minima em `GET /ops`. Ela pede a mesma `INTERNAL_API_KEY`, mas por uma tela de login simples, e permite:
 
 - rodar coleta, curadoria e rotina diaria
-- revisar drafts pendentes
+- revisar, editar e dispensar drafts pendentes
+- filtrar drafts por fila de revisao, dispensados, rejeitados e falhos
+- reabrir drafts dispensados, rejeitados ou falhos para nova revisao
+- navegar listas do dashboard com paginacao por drafts, noticias, fontes e execucoes
+- buscar por texto em drafts, noticias e fontes no dashboard operacional
 - publicar drafts aprovados
-- cadastrar e ativar/desativar fontes
+- cadastrar, editar e ativar/desativar fontes
 - acompanhar execucoes recentes e status do LinkedIn
 
 ## Endpoints internos
@@ -77,9 +81,12 @@ Todos exigem `X-API-Key`.
 - `GET /internal/auth/linkedin/status`
 - `POST /internal/auth/linkedin/start`
 - `POST /internal/auth/linkedin/validate`
+- `POST /internal/auth/linkedin/refresh`
 - `GET /internal/auth/linkedin/callback`
 - `POST /internal/drafts/{id}/approve`
 - `POST /internal/drafts/{id}/reject`
+- `POST /internal/drafts/{id}/dismiss`
+- `POST /internal/drafts/{id}/reopen`
 - `GET /internal/runs`
 
 Exemplo:
@@ -138,6 +145,6 @@ No Render, basta usar o `Dockerfile` da raiz. O app escuta na porta `8080` dentr
 ## Limitacoes atuais
 
 - Curadoria por IA usa heuristica local por padrao, mas agora pode usar `AI_PROVIDER=OpenAI` com `AI_API_KEY`.
-- O fluxo OAuth local do LinkedIn agora esta implementado, mas refresh token automatico ainda nao foi implementado.
+- O fluxo OAuth local do LinkedIn agora esta implementado, incluindo refresh do access token quando houver refresh token disponivel.
 - Similaridade semantica avancada ainda nao foi adicionada.
 - O projeto de integracao existe como base, mas os testes de integracao completos ainda ficam para a proxima iteracao.

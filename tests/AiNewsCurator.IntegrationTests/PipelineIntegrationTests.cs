@@ -83,7 +83,7 @@ public sealed class PipelineIntegrationTests : IAsyncLifetime
         await pipeline.RunCurateAsync(new TriggerContext { TriggerType = TriggerType.Manual, InitiatedBy = "test" }, CancellationToken.None);
 
         var draftCount = await ExecuteScalarAsync("SELECT COUNT(*) FROM PostDrafts WHERE Status = @Status", ("@Status", (int)DraftStatus.PendingApproval));
-        var curationCount = await ExecuteScalarAsync("SELECT COUNT(*) FROM CurationResults", null);
+        var curationCount = await ExecuteScalarAsync("SELECT COUNT(*) FROM CurationResults");
         var selectedCount = await ExecuteScalarAsync("SELECT COUNT(*) FROM NewsItems WHERE Status = @Status", ("@Status", (int)NewsItemStatus.Selected));
 
         Assert.Equal(1, draftCount);
@@ -130,7 +130,7 @@ public sealed class PipelineIntegrationTests : IAsyncLifetime
         await pipeline.RunCollectAsync(new TriggerContext { TriggerType = TriggerType.Manual, InitiatedBy = "test" }, CancellationToken.None);
         await pipeline.RunCurateAsync(new TriggerContext { TriggerType = TriggerType.Manual, InitiatedBy = "test" }, CancellationToken.None);
 
-        var newsCount = await ExecuteScalarAsync("SELECT COUNT(*) FROM NewsItems", null);
+        var newsCount = await ExecuteScalarAsync("SELECT COUNT(*) FROM NewsItems");
         var publicationCount = await ExecuteScalarAsync("SELECT COUNT(*) FROM Publications WHERE Status = @Status", ("@Status", (int)PublicationStatus.Published));
         var publishedDraftCount = await ExecuteScalarAsync("SELECT COUNT(*) FROM PostDrafts WHERE Status = @Status", ("@Status", (int)DraftStatus.Published));
 
@@ -229,6 +229,154 @@ public sealed class PipelineIntegrationTests : IAsyncLifetime
     }
 
     [Fact]
+    public async Task Dismiss_Draft_Should_Remove_It_From_Pending_Queue()
+    {
+        var pipeline = CreatePipeline(
+            publishMode: "Manual",
+            collectedItems:
+            [
+                new CollectedNewsItem
+                {
+                    ExternalId = "item-dismiss",
+                    Title = "OpenAI expands enterprise orchestration tools",
+                    Url = "https://example.com/news/openai-enterprise-orchestration",
+                    CanonicalUrl = "https://example.com/news/openai-enterprise-orchestration",
+                    PublishedAt = DateTimeOffset.UtcNow,
+                    Language = "en",
+                    RawSummary = "A broader orchestration release is now available for enterprise teams.",
+                    RawContent = "A broader orchestration release is now available for enterprise teams."
+                }
+            ],
+            aiResult: new AiEvaluationResult
+            {
+                IsRelevant = true,
+                RelevanceScore = 0.9,
+                ConfidenceScore = 0.86,
+                Category = "Agents",
+                WhyRelevant = "Impacta operacao e entrega.",
+                Summary = "Resumo factual.",
+                KeyPoints = ["Ponto 1"],
+                LinkedInTitleSuggestion = "OpenAI expands orchestration for enterprises",
+                LinkedInDraft = "Uma noticia recente sobre IA destaca um avanco em orquestracao com impacto pratico para times corporativos."
+            });
+
+        await pipeline.RunCollectAsync(new TriggerContext { TriggerType = TriggerType.Manual, InitiatedBy = "test" }, CancellationToken.None);
+        await pipeline.RunCurateAsync(new TriggerContext { TriggerType = TriggerType.Manual, InitiatedBy = "test" }, CancellationToken.None);
+
+        var draftId = await ExecuteInt64ScalarAsync("SELECT Id FROM PostDrafts ORDER BY Id DESC LIMIT 1", null);
+        var dismissed = await pipeline.DismissDraftAsync(draftId, "test-dismiss", CancellationToken.None);
+        var queueCount = await ExecuteScalarAsync(
+            "SELECT COUNT(*) FROM PostDrafts WHERE Status IN (@PendingApproval, @Approved)",
+            ("@PendingApproval", (int)DraftStatus.PendingApproval),
+            ("@Approved", (int)DraftStatus.Approved));
+        var dismissedCount = await ExecuteScalarAsync("SELECT COUNT(*) FROM PostDrafts WHERE Status = @Status", ("@Status", (int)DraftStatus.Dismissed));
+
+        Assert.True(dismissed);
+        Assert.Equal(0, queueCount);
+        Assert.Equal(1, dismissedCount);
+    }
+
+    [Fact]
+    public async Task Reopen_Draft_Should_Move_Dismissed_Item_Back_To_Review_Queue()
+    {
+        var pipeline = CreatePipeline(
+            publishMode: "Manual",
+            collectedItems:
+            [
+                new CollectedNewsItem
+                {
+                    ExternalId = "item-reopen",
+                    Title = "Anthropic adds workflow automation controls",
+                    Url = "https://example.com/news/anthropic-workflow-controls",
+                    CanonicalUrl = "https://example.com/news/anthropic-workflow-controls",
+                    PublishedAt = DateTimeOffset.UtcNow,
+                    Language = "en",
+                    RawSummary = "Anthropic now offers more control over workflow automation for teams.",
+                    RawContent = "Anthropic now offers more control over workflow automation for teams."
+                }
+            ],
+            aiResult: new AiEvaluationResult
+            {
+                IsRelevant = true,
+                RelevanceScore = 0.88,
+                ConfidenceScore = 0.83,
+                Category = "Agents",
+                WhyRelevant = "Impacta operacao e governanca.",
+                Summary = "Resumo factual.",
+                KeyPoints = ["Ponto 1"],
+                LinkedInTitleSuggestion = "Anthropic expands workflow controls",
+                LinkedInDraft = "Uma noticia recente sobre IA mostra mais controle operacional em automacoes com impacto para equipes."
+            });
+
+        await pipeline.RunCollectAsync(new TriggerContext { TriggerType = TriggerType.Manual, InitiatedBy = "test" }, CancellationToken.None);
+        await pipeline.RunCurateAsync(new TriggerContext { TriggerType = TriggerType.Manual, InitiatedBy = "test" }, CancellationToken.None);
+
+        var draftId = await ExecuteInt64ScalarAsync("SELECT Id FROM PostDrafts ORDER BY Id DESC LIMIT 1", null);
+        var dismissed = await pipeline.DismissDraftAsync(draftId, "test-dismiss", CancellationToken.None);
+        var reopened = await pipeline.ReopenDraftAsync(draftId, "test-reopen", CancellationToken.None);
+        var status = await ExecuteScalarAsync("SELECT Status FROM PostDrafts WHERE Id = @Id", ("@Id", draftId));
+        var queueCount = await ExecuteScalarAsync(
+            "SELECT COUNT(*) FROM PostDrafts WHERE Status IN (@PendingApproval, @Approved)",
+            ("@PendingApproval", (int)DraftStatus.PendingApproval),
+            ("@Approved", (int)DraftStatus.Approved));
+
+        Assert.True(dismissed);
+        Assert.True(reopened);
+        Assert.Equal((int)DraftStatus.PendingApproval, status);
+        Assert.Equal(1, queueCount);
+    }
+
+    [Fact]
+    public async Task Retry_Publish_Should_Allow_Failed_Draft_To_Be_Published_On_Second_Attempt()
+    {
+        var pipeline = CreatePipeline(
+            publishMode: "Manual",
+            collectedItems:
+            [
+                new CollectedNewsItem
+                {
+                    ExternalId = "item-retry-publish",
+                    Title = "Google expands orchestration controls for enterprise AI",
+                    Url = "https://example.com/news/google-orchestration-controls",
+                    CanonicalUrl = "https://example.com/news/google-orchestration-controls",
+                    PublishedAt = DateTimeOffset.UtcNow,
+                    Language = "en",
+                    RawSummary = "Enterprise teams now get more orchestration controls in AI workflows.",
+                    RawContent = "Enterprise teams now get more orchestration controls in AI workflows."
+                }
+            ],
+            aiResult: new AiEvaluationResult
+            {
+                IsRelevant = true,
+                RelevanceScore = 0.9,
+                ConfidenceScore = 0.86,
+                Category = "AI",
+                WhyRelevant = "Impacta operacao e governanca.",
+                Summary = "Resumo factual.",
+                KeyPoints = ["Ponto 1"],
+                LinkedInTitleSuggestion = "Google expands enterprise orchestration controls",
+                LinkedInDraft = "A new AI update expands orchestration controls for enterprise teams with practical operational impact."
+            },
+            linkedInPublisher: new FlakyLinkedInPublisher());
+
+        await pipeline.RunCollectAsync(new TriggerContext { TriggerType = TriggerType.Manual, InitiatedBy = "test" }, CancellationToken.None);
+        await pipeline.RunCurateAsync(new TriggerContext { TriggerType = TriggerType.Manual, InitiatedBy = "test" }, CancellationToken.None);
+
+        var draftId = await ExecuteInt64ScalarAsync("SELECT Id FROM PostDrafts ORDER BY Id DESC LIMIT 1", null);
+        var approved = await pipeline.ApproveDraftAsync(draftId, "test-approve", CancellationToken.None);
+        var firstPublishAttempt = await pipeline.PublishDraftAsync(draftId, "test-first-publish", CancellationToken.None);
+        var retryPublished = await pipeline.PublishDraftAsync(draftId, "test-retry", CancellationToken.None);
+        var draftStatus = await ExecuteScalarAsync("SELECT Status FROM PostDrafts WHERE Id = @Id", ("@Id", draftId));
+        var publicationCount = await ExecuteScalarAsync("SELECT COUNT(*) FROM Publications WHERE PostDraftId = @DraftId", ("@DraftId", draftId));
+
+        Assert.True(approved);
+        Assert.False(firstPublishAttempt);
+        Assert.True(retryPublished);
+        Assert.Equal((int)DraftStatus.Published, draftStatus);
+        Assert.Equal(2, publicationCount);
+    }
+
+    [Fact]
     public async Task SourceRepository_Should_Insert_And_List_Custom_Source()
     {
         var repository = new SourceRepository(_connectionFactory);
@@ -296,7 +444,11 @@ public sealed class PipelineIntegrationTests : IAsyncLifetime
         Assert.DoesNotContain(activeSources, item => item.Id == id);
     }
 
-    private NewsPipelineService CreatePipeline(string publishMode, IReadOnlyList<CollectedNewsItem> collectedItems, AiEvaluationResult aiResult)
+    private NewsPipelineService CreatePipeline(
+        string publishMode,
+        IReadOnlyList<CollectedNewsItem> collectedItems,
+        AiEvaluationResult aiResult,
+        ILinkedInPublisher? linkedInPublisher = null)
     {
         var options = Options.Create(new AppOptions
         {
@@ -318,19 +470,19 @@ public sealed class PipelineIntegrationTests : IAsyncLifetime
             new PublicationRepository(_connectionFactory),
             new ExecutionRunRepository(_connectionFactory),
             new FakeAiCurationService(aiResult),
-            new FakeLinkedInPublisher(),
+            linkedInPublisher ?? new FakeLinkedInPublisher(),
             options,
             NullLogger<NewsPipelineService>.Instance);
     }
 
-    private async Task<int> ExecuteScalarAsync(string sql, (string Name, object Value)? parameter)
+    private async Task<int> ExecuteScalarAsync(string sql, params (string Name, object Value)[] parameters)
     {
         await using var connection = await _connectionFactory.OpenAsync(CancellationToken.None);
         await using var command = connection.CreateCommand();
         command.CommandText = sql;
-        if (parameter.HasValue)
+        foreach (var parameter in parameters)
         {
-            command.Parameters.AddWithValue(parameter.Value.Name, parameter.Value.Value);
+            command.Parameters.AddWithValue(parameter.Name, parameter.Value);
         }
 
         return Convert.ToInt32(await command.ExecuteScalarAsync(CancellationToken.None));
@@ -414,6 +566,44 @@ public sealed class PipelineIntegrationTests : IAsyncLifetime
                 PlatformPostId = "linkedin-post-1",
                 RequestPayload = JsonSerializer.Serialize(new { draft.PostText }),
                 ResponsePayload = JsonSerializer.Serialize(new { id = "linkedin-post-1" })
+            });
+        }
+
+        public Task<OperationResult> ValidateCredentialsAsync(CancellationToken cancellationToken)
+        {
+            return Task.FromResult(OperationResult.Ok());
+        }
+
+        public Task<OperationResult> RefreshAccessAsync(CancellationToken cancellationToken)
+        {
+            return Task.FromResult(OperationResult.Ok());
+        }
+    }
+
+    private sealed class FlakyLinkedInPublisher : ILinkedInPublisher
+    {
+        private int _attempts;
+
+        public Task<LinkedInPublishResult> PublishTextPostAsync(PostDraft draft, CancellationToken cancellationToken)
+        {
+            _attempts++;
+            if (_attempts == 1)
+            {
+                return Task.FromResult(new LinkedInPublishResult
+                {
+                    Success = false,
+                    ErrorMessage = "Transient LinkedIn failure",
+                    RequestPayload = JsonSerializer.Serialize(new { draft.PostText }),
+                    ResponsePayload = JsonSerializer.Serialize(new { error = "temporary_failure" })
+                });
+            }
+
+            return Task.FromResult(new LinkedInPublishResult
+            {
+                Success = true,
+                PlatformPostId = "linkedin-post-retry-success",
+                RequestPayload = JsonSerializer.Serialize(new { draft.PostText }),
+                ResponsePayload = JsonSerializer.Serialize(new { id = "linkedin-post-retry-success" })
             });
         }
 

@@ -357,6 +357,41 @@ public sealed class NewsPipelineService : INewsPipelineService
         return true;
     }
 
+    public async Task<bool> DismissDraftAsync(long draftId, string approvedBy, CancellationToken cancellationToken)
+    {
+        var draft = await _postDraftRepository.GetByIdAsync(draftId, cancellationToken);
+        if (draft is null)
+        {
+            return false;
+        }
+
+        draft.Status = DraftStatus.Dismissed;
+        draft.ApprovedAt = DateTimeOffset.UtcNow;
+        draft.ApprovedBy = approvedBy;
+        await _postDraftRepository.UpdateAsync(draft, cancellationToken);
+        return true;
+    }
+
+    public async Task<bool> ReopenDraftAsync(long draftId, string approvedBy, CancellationToken cancellationToken)
+    {
+        var draft = await _postDraftRepository.GetByIdAsync(draftId, cancellationToken);
+        if (draft is null)
+        {
+            return false;
+        }
+
+        if (draft.Status is DraftStatus.Published or DraftStatus.Approved or DraftStatus.PendingApproval)
+        {
+            return false;
+        }
+
+        draft.Status = DraftStatus.PendingApproval;
+        draft.ApprovedAt = null;
+        draft.ApprovedBy = null;
+        await _postDraftRepository.UpdateAsync(draft, cancellationToken);
+        return true;
+    }
+
     private PublishMode GetPublishMode()
     {
         return Enum.TryParse<PublishMode>(_options.PublishMode, true, out var mode) ? mode : PublishMode.Manual;
