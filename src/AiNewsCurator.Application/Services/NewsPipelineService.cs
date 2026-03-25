@@ -282,6 +282,8 @@ public sealed class NewsPipelineService : INewsPipelineService
             return false;
         }
 
+        draft = await EnsureDraftIncludesOriginalArticleUrlAsync(draft, cancellationToken);
+
         var validation = await _linkedInPublisher.ValidateCredentialsAsync(cancellationToken);
         if (!validation.Success)
         {
@@ -324,6 +326,35 @@ public sealed class NewsPipelineService : INewsPipelineService
         draft.ApprovedAt = DateTimeOffset.UtcNow;
         await _postDraftRepository.UpdateAsync(draft, cancellationToken);
         return publishResult.Success;
+    }
+
+    private async Task<PostDraft> EnsureDraftIncludesOriginalArticleUrlAsync(PostDraft draft, CancellationToken cancellationToken)
+    {
+        var parsedDraft = LinkedInEditorialPostFormatter.Parse(draft.PostText);
+        if (!string.IsNullOrWhiteSpace(parsedDraft.OriginalArticleUrl))
+        {
+            return draft;
+        }
+
+        var newsItem = await _newsItemRepository.GetByIdAsync(draft.NewsItemId, cancellationToken);
+        if (newsItem is null)
+        {
+            return draft;
+        }
+
+        var editorialDraft = await ApplyEditorialMetadataAsync(newsItem, draft.PostText, cancellationToken);
+        var rebuiltPostText = LinkedInEditorialPostFormatter.BuildPostText(editorialDraft);
+        if (string.Equals(rebuiltPostText, draft.PostText, StringComparison.Ordinal))
+        {
+            return draft;
+        }
+
+        draft.TitleSuggestion = !string.IsNullOrWhiteSpace(draft.TitleSuggestion)
+            ? draft.TitleSuggestion
+            : editorialDraft.Headline;
+        draft.PostText = rebuiltPostText;
+        await _postDraftRepository.UpdateAsync(draft, cancellationToken);
+        return draft;
     }
 
     public async Task<bool> ApproveDraftAsync(long draftId, string approvedBy, CancellationToken cancellationToken)
@@ -522,6 +553,9 @@ public sealed class NewsPipelineService : INewsPipelineService
                 ? parsedDraft.StrategicTakeaway
                 : "The broader signal is that AI decisions are becoming more strategic and less experimental.",
             SourceLabel = sourceName,
+            OriginalArticleUrl = !string.IsNullOrWhiteSpace(parsedDraft.OriginalArticleUrl)
+                ? parsedDraft.OriginalArticleUrl
+                : (newsItem.CanonicalUrl ?? newsItem.Url),
             Signature = string.IsNullOrWhiteSpace(_options.AttributionFooterLine)
                 ? "Curated by AI News Curator."
                 : _options.AttributionFooterLine

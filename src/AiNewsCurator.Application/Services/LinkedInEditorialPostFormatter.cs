@@ -20,6 +20,7 @@ public static partial class LinkedInEditorialPostFormatter
                 $"Why it matters:{Environment.NewLine}{refinedDraft.WhyItMatters.Trim()}",
                 $"Strategic takeaway:{Environment.NewLine}{refinedDraft.StrategicTakeaway.Trim()}",
                 $"Source: {refinedDraft.SourceLabel.Trim()}",
+                string.IsNullOrWhiteSpace(refinedDraft.OriginalArticleUrl) ? string.Empty : $"Original article: {refinedDraft.OriginalArticleUrl.Trim()}",
                 refinedDraft.Signature.Trim()
             }.Where(section => !string.IsNullOrWhiteSpace(section)));
     }
@@ -46,7 +47,8 @@ public static partial class LinkedInEditorialPostFormatter
             WhyItMatters = StripSectionLabel(sections.ElementAtOrDefault(3), "Why it matters:"),
             StrategicTakeaway = StripSectionLabel(sections.ElementAtOrDefault(4), "Strategic takeaway:"),
             SourceLabel = StripSectionLabel(sections.ElementAtOrDefault(5), "Source:"),
-            Signature = sections.ElementAtOrDefault(6) ?? string.Empty
+            OriginalArticleUrl = ExtractOriginalArticleUrl(sections),
+            Signature = ExtractSignature(sections)
         };
     }
 
@@ -73,6 +75,30 @@ public static partial class LinkedInEditorialPostFormatter
         return value.StartsWith(label, StringComparison.OrdinalIgnoreCase)
             ? value[label.Length..].Trim()
             : value.Trim();
+    }
+
+    private static string ExtractOriginalArticleUrl(string[] sections)
+    {
+        var originalArticleSection = sections.ElementAtOrDefault(6);
+        if (string.IsNullOrWhiteSpace(originalArticleSection) ||
+            !originalArticleSection.StartsWith("Original article:", StringComparison.OrdinalIgnoreCase))
+        {
+            return string.Empty;
+        }
+
+        return StripSectionLabel(originalArticleSection, "Original article:");
+    }
+
+    private static string ExtractSignature(string[] sections)
+    {
+        var originalArticleSection = sections.ElementAtOrDefault(6);
+        if (!string.IsNullOrWhiteSpace(originalArticleSection) &&
+            originalArticleSection.StartsWith("Original article:", StringComparison.OrdinalIgnoreCase))
+        {
+            return sections.ElementAtOrDefault(7) ?? string.Empty;
+        }
+
+        return originalArticleSection ?? string.Empty;
     }
 
     [GeneratedRegex("\\s+")]

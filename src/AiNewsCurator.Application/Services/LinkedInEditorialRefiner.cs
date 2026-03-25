@@ -22,6 +22,7 @@ public static class LinkedInEditorialRefiner
             WhyItMatters = LinkedInEditorialPostFormatter.SanitizeSentence(draft.WhyItMatters, 320),
             StrategicTakeaway = LinkedInEditorialPostFormatter.SanitizeSentence(ShortenToTwoSentences(draft.StrategicTakeaway), 220),
             SourceLabel = LinkedInEditorialPostFormatter.SanitizeSentence(draft.SourceLabel, 80),
+            OriginalArticleUrl = draft.OriginalArticleUrl?.Trim() ?? string.Empty,
             Signature = LinkedInEditorialPostFormatter.SanitizeSentence(draft.Signature, 80)
         };
 

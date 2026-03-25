@@ -99,6 +99,7 @@ public sealed class HeuristicAiCurationService : IAiCurationService
             WhyItMatters = "This moves AI closer to workflow execution instead of just assistance. That matters because teams can judge task completion and operational automation in real environments.",
             StrategicTakeaway = "The real shift is that AI is becoming an execution layer inside workflows, not just a conversational layer on top of them.",
             SourceLabel = "Original reporting",
+            OriginalArticleUrl = newsItem.CanonicalUrl,
             Signature = "Curated by AI News Curator."
         };
 

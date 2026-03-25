@@ -377,6 +377,71 @@ public sealed class PipelineIntegrationTests : IAsyncLifetime
     }
 
     [Fact]
+    public async Task PublishDraft_Should_Add_Original_Article_Link_For_Legacy_Draft_Before_Publishing()
+    {
+        var pipeline = CreatePipeline(
+            publishMode: "Manual",
+            collectedItems:
+            [
+                new CollectedNewsItem
+                {
+                    ExternalId = "item-legacy-link",
+                    Title = "Microsoft expands .NET delivery tooling",
+                    Url = "https://example.com/news/microsoft-dotnet-delivery",
+                    CanonicalUrl = "https://example.com/news/microsoft-dotnet-delivery",
+                    PublishedAt = DateTimeOffset.UtcNow,
+                    Language = "en",
+                    RawSummary = "Microsoft expanded .NET delivery tooling for developer teams.",
+                    RawContent = "Microsoft expanded .NET delivery tooling for developer teams."
+                }
+            ],
+            aiResult: new AiEvaluationResult
+            {
+                IsRelevant = true,
+                RelevanceScore = 0.9,
+                ConfidenceScore = 0.86,
+                Category = "AI",
+                WhyRelevant = "Impacts developer workflows.",
+                Summary = "Factual summary.",
+                KeyPoints = ["Point 1"],
+                LinkedInTitleSuggestion = "Microsoft expands .NET delivery tooling",
+                LinkedInDraft =
+                    """
+                    Microsoft expands .NET delivery tooling
+
+                    This is a meaningful step in the shift from AI assistants to AI operators.
+
+                    What happened:
+                    Microsoft expanded .NET delivery tooling for developer teams.
+
+                    Why it matters:
+                    This affects developer workflows and release readiness.
+
+                    Strategic takeaway:
+                    The bigger signal is that tooling speed is becoming a product advantage.
+
+                    Source: .NET Blog
+
+                    Curated by AI News Curator.
+                    """
+            });
+
+        await pipeline.RunCollectAsync(new TriggerContext { TriggerType = TriggerType.Manual, InitiatedBy = "test" }, CancellationToken.None);
+        await pipeline.RunCurateAsync(new TriggerContext { TriggerType = TriggerType.Manual, InitiatedBy = "test" }, CancellationToken.None);
+
+        var draftId = await ExecuteInt64ScalarAsync("SELECT Id FROM PostDrafts ORDER BY Id DESC LIMIT 1", null);
+        var approved = await pipeline.ApproveDraftAsync(draftId, "test-approve", CancellationToken.None);
+        var published = await pipeline.PublishDraftAsync(draftId, "test-publish", CancellationToken.None);
+        var postText = await ExecuteStringScalarAsync("SELECT PostText FROM PostDrafts WHERE Id = @Id", ("@Id", draftId));
+        var requestPayload = await ExecuteStringScalarAsync("SELECT RequestPayload FROM Publications WHERE PostDraftId = @DraftId ORDER BY Id DESC LIMIT 1", ("@DraftId", draftId));
+
+        Assert.True(approved);
+        Assert.True(published);
+        Assert.Contains("Original article: https://example.com/news/microsoft-dotnet-delivery", postText);
+        Assert.Contains("Original article: https://example.com/news/microsoft-dotnet-delivery", requestPayload);
+    }
+
+    [Fact]
     public async Task SourceRepository_Should_Insert_And_List_Custom_Source()
     {
         var repository = new SourceRepository(_connectionFactory);
