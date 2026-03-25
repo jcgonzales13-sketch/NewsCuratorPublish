@@ -54,37 +54,11 @@ public sealed class LinkedInAuthController : ControllerBase
     {
         if (string.IsNullOrWhiteSpace(code) || string.IsNullOrWhiteSpace(state))
         {
-            var failed = await _linkedInAuthService.HandleCallbackAsync(string.Empty, state ?? string.Empty, error ?? "missing_code", errorDescription, cancellationToken);
-            return Content(BuildHtml(failed.Success, failed.Message, failed.MemberName, failed.MemberEmail), "text/html");
+            await _linkedInAuthService.HandleCallbackAsync(string.Empty, state ?? string.Empty, error ?? "missing_code", errorDescription, cancellationToken);
+            return Redirect("/ops");
         }
 
-        var result = await _linkedInAuthService.HandleCallbackAsync(code, state, error, errorDescription, cancellationToken);
-        return Content(BuildHtml(result.Success, result.Message, result.MemberName, result.MemberEmail), "text/html");
-    }
-
-    private static string BuildHtml(bool success, string message, string? memberName, string? memberEmail)
-    {
-        var title = success ? "LinkedIn connected" : "LinkedIn connection failed";
-        var details = success
-            ? $"<p><strong>Name:</strong> {System.Net.WebUtility.HtmlEncode(memberName ?? "-")}</p><p><strong>Email:</strong> {System.Net.WebUtility.HtmlEncode(memberEmail ?? "-")}</p>"
-            : string.Empty;
-
-        return
-            $"""
-            <!doctype html>
-            <html lang="en">
-            <head>
-              <meta charset="utf-8" />
-              <meta name="viewport" content="width=device-width, initial-scale=1" />
-              <title>{title}</title>
-            </head>
-            <body style="font-family: Arial, sans-serif; padding: 24px; max-width: 680px; margin: 0 auto;">
-              <h1>{title}</h1>
-              <p>{System.Net.WebUtility.HtmlEncode(message)}</p>
-              {details}
-              <p>You can close this window and return to the application.</p>
-            </body>
-            </html>
-            """;
+        await _linkedInAuthService.HandleCallbackAsync(code, state, error, errorDescription, cancellationToken);
+        return Redirect("/ops");
     }
 }
