@@ -4,6 +4,7 @@ using AiNewsCurator.Domain.Interfaces;
 using AiNewsCurator.Infrastructure.Persistence;
 using Microsoft.Data.Sqlite;
 using System.Net;
+using System.Text.RegularExpressions;
 
 namespace AiNewsCurator.Infrastructure.Repositories;
 
@@ -284,6 +285,9 @@ public sealed class NewsItemRepository : INewsItemRepository
             return value;
         }
 
-        return WebUtility.HtmlDecode(value).Trim();
+        var withoutScripts = Regex.Replace(value, "<script.*?</script>|<style.*?</style>", string.Empty, RegexOptions.IgnoreCase | RegexOptions.Singleline);
+        var withoutTags = Regex.Replace(withoutScripts, "<[^>]+>", " ");
+        var decoded = WebUtility.HtmlDecode(withoutTags).Trim();
+        return Regex.Replace(decoded, "\\s+", " ").Trim();
     }
 }

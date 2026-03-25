@@ -1,41 +1,79 @@
 # AI News Curator for LinkedIn
 
-MVP em .NET 8 para coletar noticias de IA via RSS, persistir em SQLite, aplicar curadoria automatizada, gerar draft em portugues para LinkedIn e operar em modo manual ou automatico.
+A .NET 8 application that collects AI and developer news from RSS feeds, stores it in SQLite, curates it with AI-assisted workflows, generates LinkedIn-ready drafts in English, and supports both manual and automatic publishing modes.
 
-## Estrutura
+## Structure
 
-- `src/AiNewsCurator.Api`: endpoints internos, healthcheck e aprovacao manual.
-- `src/AiNewsCurator.Worker`: scheduler diario com `BackgroundService`.
-- `src/AiNewsCurator.Application`: orquestracao do pipeline e regras de aplicacao.
-- `src/AiNewsCurator.Domain`: entidades, enums, regras e interfaces.
-- `src/AiNewsCurator.Infrastructure`: SQLite, RSS, servicos de IA e adaptador do LinkedIn.
-- `tests/`: testes unitarios e esqueleto de integracao.
+- `src/AiNewsCurator.Api`: internal API endpoints, healthcheck, LinkedIn OAuth callback, and the `/ops` dashboard
+- `src/AiNewsCurator.Worker`: scheduled background execution for collection and curation flows
+- `src/AiNewsCurator.Application`: pipeline orchestration and editorial/business rules
+- `src/AiNewsCurator.Domain`: entities, enums, interfaces, and shared rules
+- `src/AiNewsCurator.Infrastructure`: SQLite persistence, RSS collection, AI integrations, LinkedIn publishing, and image enrichment
+- `tests/`: unit and integration test suites
 
-## Fluxo do MVP
+## Current Flow
 
-1. Inicializa schema SQLite e semeia duas fontes RSS padrao.
-2. Coleta noticias recentes das fontes ativas.
-3. Normaliza URL e hashes para deduplicacao.
-4. Avalia relevancia e gera draft com um servico heuristico de IA.
-5. Valida o texto do post.
-6. Salva draft para aprovacao manual ou aprova automaticamente.
-7. Publica no LinkedIn via adaptador isolado quando solicitado.
+1. Initialize the SQLite schema and seed default RSS sources.
+2. Collect recent items from active RSS sources.
+3. Normalize URLs and content hashes for deduplication.
+4. Evaluate relevance and generate an editorial LinkedIn draft in English.
+5. Validate the draft text and store editorial review notes if needed.
+6. Save the draft for manual review or auto-approve it when confidence and validation thresholds allow it.
+7. Publish the draft to LinkedIn on demand or automatically, including the original article URL in the final post text.
 
-## Configuracao
+## Key Features
 
-Use o arquivo `.env.example` como referencia. As principais variaveis:
+- English-only editorial generation and operational UI
+- LinkedIn OAuth callback flow with access-token refresh support
+- Automatic retry path for expired LinkedIn access tokens
+- Draft review workflow with `Approve`, `Reject`, `Dismiss`, `Reopen`, and `Retry publish`
+- Draft editing in `/ops`
+- Source creation, editing, activation, and deactivation in `/ops`
+- Search and pagination for drafts, news, sources, and runs
+- Failure classification and retry guidance for failed LinkedIn publishes
+- Automatic inclusion of `Original article: ...` in LinkedIn post text
+- Legacy-draft repair at publish time so older drafts still receive the article URL before posting
+- Manual image URL fallback in `/ops` when no image was found during collection or enrichment
 
-- `DATABASE_PATH`: caminho do arquivo SQLite. No Render use persistent disk, por exemplo `/var/data/ainews/ainews.db`.
-- `PUBLISH_MODE`: `Manual` ou `Automatic`.
-- `INTERNAL_API_KEY`: chave exigida em `/internal/*` via header `X-API-Key`.
-- `LINKEDIN_ACCESS_TOKEN` e `LINKEDIN_MEMBER_URN`: necessarios para publicacao real.
-- `AI_PROVIDER`: no MVP o valor padrao `Heuristic` usa um avaliador local sem custo.
+## Default Sources
 
-O projeto ja aceita diretamente os nomes da spec em ambiente, como `DATABASE_PATH`, `PUBLISH_MODE`, `INTERNAL_API_KEY`, `LINKEDIN_ACCESS_TOKEN` e `AI_PROVIDER`.
+The application seeds default RSS sources, including:
 
-Para execucao local com segredos fora do projeto, copie [.env.local.example](/c:/PublishNews/.env.local.example) para `.env.local`, preencha as chaves e use [run-api-local.sh](/c:/PublishNews/scripts/run-api-local.sh).
+- `OpenAI News`
+- `MIT AI News`
+- `.NET Blog`
+- `C# Category - .NET Blog`
+- `JetBrains .NET Tools Blog`
+- `InfoQ .NET`
+- `Visual Studio Magazine`
 
-## Execucao local
+Default seeding is additive by URL, so missing defaults can be inserted even when the database already contains existing sources.
+
+## Configuration
+
+Use `.env.example` as the main reference for environment variables.
+
+Important settings include:
+
+- `DATABASE_PATH`: path to the SQLite database file
+- `PUBLISH_MODE`: `Manual` or `Automatic`
+- `INTERNAL_API_KEY`: required for `/internal/*` endpoints and `/ops` login
+- `AI_PROVIDER`: `Heuristic` or `OpenAI`
+- `AI_API_KEY`: required when `AI_PROVIDER=OpenAI`
+- `AI_MODEL_NAME`: model name used for OpenAI Responses API requests
+- `LINKEDIN_CLIENT_ID`: LinkedIn OAuth client id
+- `LINKEDIN_CLIENT_SECRET`: LinkedIn OAuth client secret
+- `LINKEDIN_REDIRECT_URI`: LinkedIn OAuth callback URL
+- `LINKEDIN_ACCESS_TOKEN`: optional fallback access token
+- `LINKEDIN_MEMBER_URN`: optional fallback member URN
+
+For local execution with secrets outside the repository:
+
+- copy [.env.local.example](/c:/PublishNews/.env.local.example) to `.env.local`
+- fill in the required values
+- use [run-api-local.sh](/c:/PublishNews/scripts/run-api-local.sh)
+
+## Local Run
 
 ```bash
 dotnet build PublishNews.sln
@@ -43,27 +81,48 @@ dotnet test PublishNews.sln
 dotnet run --project src/AiNewsCurator.Api
 ```
 
-Em outro terminal:
+In another terminal:
 
 ```bash
 dotnet run --project src/AiNewsCurator.Worker
 ```
 
-Tambem existe uma UI operacional minima em `GET /ops`. Ela pede a mesma `INTERNAL_API_KEY`, mas por uma tela de login simples, e permite:
+## Ops Dashboard
 
-- rodar coleta, curadoria e rotina diaria
-- revisar, editar e dispensar drafts pendentes
-- filtrar drafts por fila de revisao, dispensados, rejeitados e falhos
-- reabrir drafts dispensados, rejeitados ou falhos para nova revisao
-- navegar listas do dashboard com paginacao por drafts, noticias, fontes e execucoes
-- buscar por texto em drafts, noticias e fontes no dashboard operacional
-- publicar drafts aprovados
-- cadastrar, editar e ativar/desativar fontes
-- acompanhar execucoes recentes e status do LinkedIn
+`GET /ops` provides the internal operational dashboard. It uses the same `INTERNAL_API_KEY`, but through a simple login screen.
 
-## Endpoints internos
+The dashboard supports:
 
-Todos exigem `X-API-Key`.
+- running daily, collect, curate, and normalize flows
+- reviewing drafts in editorial or feed preview mode
+- editing draft title and post text
+- approving, rejecting, dismissing, reopening, publishing, and retrying failed drafts
+- viewing LinkedIn validation and refresh actions
+- searching drafts, news, and sources
+- paginating drafts, news, sources, and runs independently
+- managing sources
+- adding a manual image URL when a news item has no captured image
+- preserving current filter/page context after actions
+
+### Draft Status Notes
+
+- `PendingApproval`: waiting for review
+- `Approved`: approved and ready to publish
+- `Dismissed`: intentionally removed from the review queue without rejection
+- `Rejected`: explicitly rejected
+- `Failed`: publish attempt failed
+- `Published`: successfully published
+
+### LinkedIn Publish Notes
+
+- Final post text includes `Source: ...`
+- Final post text also includes `Original article: https://...`
+- If an older draft was created before the article-link format existed, the publish pipeline repairs the draft text before sending it to LinkedIn
+- If a news item has an image, the publisher attempts an image upload and falls back to text-only on upload failure
+
+## Internal Endpoints
+
+All `/internal/*` endpoints require `X-API-Key`.
 
 - `GET /health`
 - `POST /internal/run/daily`
@@ -89,49 +148,56 @@ Todos exigem `X-API-Key`.
 - `POST /internal/drafts/{id}/reopen`
 - `GET /internal/runs`
 
-Exemplo:
+Example:
 
 ```bash
 curl -X POST http://localhost:5138/internal/run/daily -H "X-API-Key: changeme"
 ```
 
-Para iniciar a conexao OAuth do LinkedIn em ambiente local:
+To start local LinkedIn OAuth:
 
 ```bash
 curl -X POST http://localhost:5138/internal/auth/linkedin/start -H "X-API-Key: changeme"
 ```
 
-Use a URL retornada no navegador. O callback esperado para desenvolvimento local e `http://localhost:5138/internal/auth/linkedin/callback`.
+Open the returned URL in a browser. The expected local callback is:
 
-## Deploy no Render
+```text
+http://localhost:5138/internal/auth/linkedin/callback
+```
 
-O repositório agora inclui [render.yaml](/c:/PublishNews/render.yaml) com o desenho recomendado para SQLite no MVP: um unico `Web Service` hospedando a API e o scheduler interno no mesmo processo.
+After the callback completes, the application redirects the browser to `/ops`.
 
-Motivo: no Render, o persistent disk e por servico. Com SQLite, separar API e worker em servicos diferentes introduz risco de cada processo enxergar um filesystem diferente.
+## Deploy on Render
 
-Passos:
+The repository includes [render.yaml](/c:/PublishNews/render.yaml) with the recommended SQLite MVP topology: a single web service hosting both the API and the internal scheduler in the same process.
 
-1. Criar o servico a partir do blueprint `render.yaml`.
-2. Manter `ENABLE_SCHEDULER=true` no servico web para a rotina diaria rodar internamente.
-3. Configurar segredos como `INTERNAL_API_KEY`, `AI_API_KEY`, `LINKEDIN_ACCESS_TOKEN` e `LINKEDIN_MEMBER_URN`.
-4. Confirmar o mount do disco em `/var/data/ainews`.
-5. Validar o healthcheck em `/health`.
+Why this is recommended:
 
-Nao use cron job separado do Render acessando SQLite local, porque o persistent disk nao e compartilhado da forma necessaria para esse desenho.
+- on Render, persistent disks are attached per service
+- with SQLite, separating API and worker into different services can lead to each process seeing a different filesystem context
 
-O projeto `AiNewsCurator.Worker` continua util para outros ambientes, mas no Render com SQLite a topologia recomendada e o host web unico.
+Recommended steps:
+
+1. Create the service from `render.yaml`.
+2. Keep `ENABLE_SCHEDULER=true` so the daily routine runs inside the web service.
+3. Configure secrets such as `INTERNAL_API_KEY`, `AI_API_KEY`, `LINKEDIN_CLIENT_ID`, `LINKEDIN_CLIENT_SECRET`, and `LINKEDIN_REDIRECT_URI`.
+4. Confirm the persistent disk mount path, for example `/var/data/ainews`.
+5. Validate the healthcheck on `/health`.
+
+Do not use a separate Render cron job against a local SQLite file for this topology.
 
 ## Docker
 
-O repositorio agora inclui [Dockerfile](/c:/PublishNews/Dockerfile) e [.dockerignore](/c:/PublishNews/.dockerignore) para publicar a `Api` em container.
+The repository includes [Dockerfile](/c:/PublishNews/Dockerfile) and [.dockerignore](/c:/PublishNews/.dockerignore) for containerized deployment of the API.
 
-Build local:
+Build locally:
 
 ```bash
 docker build -t ai-news-curator .
 ```
 
-Execucao local:
+Run locally:
 
 ```bash
 docker run --rm -p 8080:8080 \
@@ -140,11 +206,27 @@ docker run --rm -p 8080:8080 \
   ai-news-curator
 ```
 
-No Render, basta usar o `Dockerfile` da raiz. O app escuta na porta `8080` dentro do container e o healthcheck continua em `/health`.
+## Test Coverage
 
-## Limitacoes atuais
+The project includes both unit and integration coverage for important flows, including:
 
-- Curadoria por IA usa heuristica local por padrao, mas agora pode usar `AI_PROVIDER=OpenAI` com `AI_API_KEY`.
-- O fluxo OAuth local do LinkedIn agora esta implementado, incluindo refresh do access token quando houver refresh token disponivel.
-- Similaridade semantica avancada ainda nao foi adicionada.
-- O projeto de integracao existe como base, mas os testes de integracao completos ainda ficam para a proxima iteracao.
+- LinkedIn token refresh behavior
+- LinkedIn credential validation retry after expired token
+- editorial post formatting and article-link parsing
+- RSS summary sanitization with image extraction
+- collection, curation, publishing, dismiss/reopen, retry publish, and source repository flows
+- manual image persistence on news items
+
+Run the full suite with:
+
+```bash
+dotnet test PublishNews.sln
+```
+
+## Current Limitations
+
+- SQLite is still the persistence layer, so horizontal scaling is intentionally limited
+- AI curation defaults to the local heuristic provider unless `AI_PROVIDER=OpenAI`
+- semantic similarity and richer duplicate detection are still basic
+- LinkedIn publishing currently posts text plus optional uploaded image, not a full external article card/embed
+- existing stored news items with old HTML-heavy summaries may need `Normalize news` or reprocessing to clean previously ingested content

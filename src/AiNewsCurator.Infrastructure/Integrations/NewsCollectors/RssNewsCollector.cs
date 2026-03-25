@@ -43,8 +43,9 @@ public sealed class RssNewsCollector : INewsCollector
             {
                 var link = item.Links.FirstOrDefault()?.Uri?.ToString() ?? string.Empty;
                 var title = DecodeHtml(item.Title?.Text ?? string.Empty);
-                var summary = DecodeHtml(item.Summary?.Text ?? item.Title?.Text ?? string.Empty);
-                var imageUrl = TryGetImageUrl(item, summary);
+                var summaryHtml = item.Summary?.Text ?? item.Title?.Text ?? string.Empty;
+                var summary = SanitizeSummary(summaryHtml);
+                var imageUrl = TryGetImageUrl(item, summaryHtml);
 
                 return new CollectedNewsItem
                 {
@@ -71,6 +72,19 @@ public sealed class RssNewsCollector : INewsCollector
     private static string DecodeHtml(string value)
     {
         return WebUtility.HtmlDecode(value).Trim();
+    }
+
+    private static string SanitizeSummary(string value)
+    {
+        if (string.IsNullOrWhiteSpace(value))
+        {
+            return string.Empty;
+        }
+
+        var withoutScripts = Regex.Replace(value, "<script.*?</script>|<style.*?</style>", string.Empty, RegexOptions.IgnoreCase | RegexOptions.Singleline);
+        var withoutTags = Regex.Replace(withoutScripts, "<[^>]+>", " ");
+        var decoded = WebUtility.HtmlDecode(withoutTags);
+        return Regex.Replace(decoded, "\\s+", " ").Trim();
     }
 
     private static string? TryGetImageUrl(SyndicationItem item, string? summary)
