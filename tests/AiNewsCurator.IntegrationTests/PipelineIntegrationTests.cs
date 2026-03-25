@@ -509,6 +509,36 @@ public sealed class PipelineIntegrationTests : IAsyncLifetime
         Assert.DoesNotContain(activeSources, item => item.Id == id);
     }
 
+    [Fact]
+    public async Task NewsItemRepository_Should_Update_Image_Manually()
+    {
+        var repository = new NewsItemRepository(_connectionFactory);
+        var newsItem = new NewsItem
+        {
+            SourceId = 1,
+            Title = "Manual image test",
+            Url = "https://example.com/news/manual-image-test",
+            CanonicalUrl = "https://example.com/news/manual-image-test",
+            PublishedAt = DateTimeOffset.UtcNow,
+            Language = "en",
+            RawSummary = "Summary",
+            RawContent = "Content",
+            ContentHash = "content-hash",
+            TitleHash = "title-hash",
+            Status = NewsItemStatus.Collected,
+            CreatedAt = DateTimeOffset.UtcNow,
+            UpdatedAt = DateTimeOffset.UtcNow
+        };
+
+        var id = await repository.InsertAsync(newsItem, CancellationToken.None);
+        await repository.UpdateImageAsync(id, "https://example.com/images/manual-image.jpg", "Manual", CancellationToken.None);
+        var updated = await repository.GetByIdAsync(id, CancellationToken.None);
+
+        Assert.NotNull(updated);
+        Assert.Equal("https://example.com/images/manual-image.jpg", updated!.ImageUrl);
+        Assert.Equal("Manual", updated.ImageOrigin);
+    }
+
     private NewsPipelineService CreatePipeline(
         string publishMode,
         IReadOnlyList<CollectedNewsItem> collectedItems,

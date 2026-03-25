@@ -431,6 +431,31 @@ public sealed class OperationsController : Controller
         return RedirectToReturnUrl(returnUrl);
     }
 
+    [HttpPost("/ops/news/{id:long}/image")]
+    [ValidateAntiForgeryToken]
+    public async Task<IActionResult> UpdateNewsImage(long id, [Bind(Prefix = "ImageForm")] UpdateNewsImageFormModel model, [FromForm] string? returnUrl = null, CancellationToken cancellationToken = default)
+    {
+        var newsItem = await _newsItemRepository.GetByIdAsync(id, cancellationToken);
+        if (newsItem is null)
+        {
+            SetFlash("News item not found.", true);
+            return RedirectToReturnUrl(returnUrl);
+        }
+
+        var imageUrl = model.ImageUrl?.Trim();
+        if (string.IsNullOrWhiteSpace(imageUrl) ||
+            !Uri.TryCreate(imageUrl, UriKind.Absolute, out var imageUri) ||
+            (imageUri.Scheme != Uri.UriSchemeHttp && imageUri.Scheme != Uri.UriSchemeHttps))
+        {
+            SetFlash("Enter a valid absolute image URL.", true);
+            return RedirectToReturnUrl(returnUrl);
+        }
+
+        await _newsItemRepository.UpdateImageAsync(id, imageUrl, "Manual", cancellationToken);
+        SetFlash("Manual image saved successfully.");
+        return RedirectToReturnUrl(returnUrl);
+    }
+
     [HttpPost("/ops/linkedin/connect")]
     [ValidateAntiForgeryToken]
     public async Task<IActionResult> ConnectLinkedIn(CancellationToken cancellationToken)

@@ -13,6 +13,10 @@ public sealed class OperationsDraftViewModel
         TitleSuggestion = Draft.TitleSuggestion,
         PostText = Draft.PostText
     };
+    public UpdateNewsImageFormModel ImageForm => new()
+    {
+        ImageUrl = NewsItem?.ImageUrl ?? string.Empty
+    };
     public NewsItem? NewsItem { get; init; }
     public string? SourceName { get; init; }
     public Publication? LatestPublication { get; init; }
