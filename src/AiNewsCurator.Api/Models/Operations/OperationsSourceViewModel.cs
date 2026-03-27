@@ -1,4 +1,5 @@
 using System.Text.Json;
+using AiNewsCurator.Api.Operations;
 using AiNewsCurator.Domain.Entities;
 
 namespace AiNewsCurator.Api.Models.Operations;
@@ -6,9 +7,11 @@ namespace AiNewsCurator.Api.Models.Operations;
 public sealed class OperationsSourceViewModel
 {
     public required Source Source { get; init; }
+    public string EditorialProfileLabel => SourceInputMapper.ResolveEditorialProfileLabel(Source);
 
     public UpdateSourceFormModel EditForm => new()
     {
+        EditorialProfile = SourceInputMapper.ResolveEditorialProfile(Source),
         Name = Source.Name,
         Type = Source.Type.ToString(),
         Url = Source.Url,

@@ -12,6 +12,7 @@ public sealed class OperationsDashboardViewModel
     public LinkedInAuthState LinkedInStatus { get; init; } = new();
     public CreateSourceFormModel CreateSource { get; init; } = new();
     public string DraftFilter { get; init; } = "review";
+    public string EditorialProfileFilter { get; init; } = "all";
     public string DraftQuery { get; init; } = string.Empty;
     public string NewsQuery { get; init; } = string.Empty;
     public string SourceQuery { get; init; } = string.Empty;

@@ -4,7 +4,7 @@ namespace AiNewsCurator.Infrastructure.Integrations.AI;
 
 internal static class OpenAiPromptFactory
 {
-    public static object[] BuildEvaluationInput(NewsItem newsItem, string tone)
+    public static object[] BuildEvaluationInput(NewsItem newsItem, string tone, string? sourceName, string profileName, string profileInstruction)
     {
         return
         [
@@ -20,14 +20,18 @@ internal static class OpenAiPromptFactory
                     $"Evaluate the following news item and produce structured JSON.\n" +
                     $"Title: {newsItem.Title}\n" +
                     $"Canonical URL: {newsItem.CanonicalUrl}\n" +
+                    $"Source: {sourceName}\n" +
+                    $"Editorial profile: {profileName}\n" +
                     $"Raw summary: {newsItem.RawSummary}\n" +
                     $"Raw content: {newsItem.RawContent}\n\n" +
                     $"Preferred tone: {tone}\n\n" +
+                    $"Profile guidance: {profileInstruction}\n\n" +
                     "Rules:\n" +
                     "- Write in English.\n" +
                     "- Do not invent facts.\n" +
                     "- Be factual, clear, and publication-ready.\n" +
                     "- Assess relevance, confidence, category, and key points.\n" +
+                    "- Relevance must be judged against the editorial profile, not only generic AI coverage.\n" +
                     "- Also produce a structured LinkedIn draft with these exact sections: headline, hook, whatHappened, whyItMatters, strategicTakeaway, sourceLabel, signature.\n" +
                     "- Internally generate multiple candidates before choosing the final result: 3 headlines, 3 hooks from different hook types, 2 whatHappened options, 2 whyItMatters options, and 3 strategic takeaways.\n" +
                     "- Return only the selected final draft, plus hookType.\n" +

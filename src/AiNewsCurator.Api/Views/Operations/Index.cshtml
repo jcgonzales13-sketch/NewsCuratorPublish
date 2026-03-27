@@ -102,23 +102,30 @@
                     <div class="muted">Sharper editorial structure, quality analysis, and a LinkedIn feed preview.</div>
                 </div>
                 <div class="preview-switch">
-                    <a href="/ops?sort=@Model.NewsSort&preview=editorial&drafts=@Model.DraftFilter&draftQuery=@Model.DraftQuery&newsQuery=@Model.NewsQuery&sourceQuery=@Model.SourceQuery&draftPage=1&newsPage=@Model.NewsPage&sourcePage=@Model.SourcePage&runPage=@Model.RunPage" class="button-link @(Model.PreviewMode == "editorial" ? string.Empty : "secondary")">Editorial preview</a>
-                    <a href="/ops?sort=@Model.NewsSort&preview=feed&drafts=@Model.DraftFilter&draftQuery=@Model.DraftQuery&newsQuery=@Model.NewsQuery&sourceQuery=@Model.SourceQuery&draftPage=1&newsPage=@Model.NewsPage&sourcePage=@Model.SourcePage&runPage=@Model.RunPage" class="button-link @(Model.PreviewMode == "feed" ? string.Empty : "secondary")">LinkedIn feed preview</a>
+                    <a href="/ops?sort=@Model.NewsSort&preview=editorial&drafts=@Model.DraftFilter&profile=@Model.EditorialProfileFilter&draftQuery=@Model.DraftQuery&newsQuery=@Model.NewsQuery&sourceQuery=@Model.SourceQuery&draftPage=1&newsPage=@Model.NewsPage&sourcePage=@Model.SourcePage&runPage=@Model.RunPage" class="button-link @(Model.PreviewMode == "editorial" ? string.Empty : "secondary")">Editorial preview</a>
+                    <a href="/ops?sort=@Model.NewsSort&preview=feed&drafts=@Model.DraftFilter&profile=@Model.EditorialProfileFilter&draftQuery=@Model.DraftQuery&newsQuery=@Model.NewsQuery&sourceQuery=@Model.SourceQuery&draftPage=1&newsPage=@Model.NewsPage&sourcePage=@Model.SourcePage&runPage=@Model.RunPage" class="button-link @(Model.PreviewMode == "feed" ? string.Empty : "secondary")">LinkedIn feed preview</a>
                 </div>
             </div>
 
             <div class="preview-switch" style="margin-bottom: 16px; flex-wrap: wrap;">
-                <a href="/ops?sort=@Model.NewsSort&preview=@Model.PreviewMode&drafts=review&draftQuery=@Model.DraftQuery&newsQuery=@Model.NewsQuery&sourceQuery=@Model.SourceQuery&draftPage=1&newsPage=@Model.NewsPage&sourcePage=@Model.SourcePage&runPage=@Model.RunPage" class="button-link @(Model.DraftFilter == "review" ? string.Empty : "secondary")">Review (@Model.ReviewDraftCount)</a>
-                <a href="/ops?sort=@Model.NewsSort&preview=@Model.PreviewMode&drafts=dismissed&draftQuery=@Model.DraftQuery&newsQuery=@Model.NewsQuery&sourceQuery=@Model.SourceQuery&draftPage=1&newsPage=@Model.NewsPage&sourcePage=@Model.SourcePage&runPage=@Model.RunPage" class="button-link @(Model.DraftFilter == "dismissed" ? string.Empty : "secondary")">Dismissed (@Model.DismissedDraftCount)</a>
-                <a href="/ops?sort=@Model.NewsSort&preview=@Model.PreviewMode&drafts=rejected&draftQuery=@Model.DraftQuery&newsQuery=@Model.NewsQuery&sourceQuery=@Model.SourceQuery&draftPage=1&newsPage=@Model.NewsPage&sourcePage=@Model.SourcePage&runPage=@Model.RunPage" class="button-link @(Model.DraftFilter == "rejected" ? string.Empty : "secondary")">Rejected (@Model.RejectedDraftCount)</a>
-                <a href="/ops?sort=@Model.NewsSort&preview=@Model.PreviewMode&drafts=failed&draftQuery=@Model.DraftQuery&newsQuery=@Model.NewsQuery&sourceQuery=@Model.SourceQuery&draftPage=1&newsPage=@Model.NewsPage&sourcePage=@Model.SourcePage&runPage=@Model.RunPage" class="button-link @(Model.DraftFilter == "failed" ? string.Empty : "secondary")">Failed (@Model.FailedDraftCount)</a>
-                <a href="/ops?sort=@Model.NewsSort&preview=@Model.PreviewMode&drafts=all&draftQuery=@Model.DraftQuery&newsQuery=@Model.NewsQuery&sourceQuery=@Model.SourceQuery&draftPage=1&newsPage=@Model.NewsPage&sourcePage=@Model.SourcePage&runPage=@Model.RunPage" class="button-link @(Model.DraftFilter == "all" ? string.Empty : "secondary")">All (@Model.TotalEditableDraftCount)</a>
+                <a href="/ops?sort=@Model.NewsSort&preview=@Model.PreviewMode&drafts=review&profile=@Model.EditorialProfileFilter&draftQuery=@Model.DraftQuery&newsQuery=@Model.NewsQuery&sourceQuery=@Model.SourceQuery&draftPage=1&newsPage=@Model.NewsPage&sourcePage=@Model.SourcePage&runPage=@Model.RunPage" class="button-link @(Model.DraftFilter == "review" ? string.Empty : "secondary")">Review (@Model.ReviewDraftCount)</a>
+                <a href="/ops?sort=@Model.NewsSort&preview=@Model.PreviewMode&drafts=dismissed&profile=@Model.EditorialProfileFilter&draftQuery=@Model.DraftQuery&newsQuery=@Model.NewsQuery&sourceQuery=@Model.SourceQuery&draftPage=1&newsPage=@Model.NewsPage&sourcePage=@Model.SourcePage&runPage=@Model.RunPage" class="button-link @(Model.DraftFilter == "dismissed" ? string.Empty : "secondary")">Dismissed (@Model.DismissedDraftCount)</a>
+                <a href="/ops?sort=@Model.NewsSort&preview=@Model.PreviewMode&drafts=rejected&profile=@Model.EditorialProfileFilter&draftQuery=@Model.DraftQuery&newsQuery=@Model.NewsQuery&sourceQuery=@Model.SourceQuery&draftPage=1&newsPage=@Model.NewsPage&sourcePage=@Model.SourcePage&runPage=@Model.RunPage" class="button-link @(Model.DraftFilter == "rejected" ? string.Empty : "secondary")">Rejected (@Model.RejectedDraftCount)</a>
+                <a href="/ops?sort=@Model.NewsSort&preview=@Model.PreviewMode&drafts=failed&profile=@Model.EditorialProfileFilter&draftQuery=@Model.DraftQuery&newsQuery=@Model.NewsQuery&sourceQuery=@Model.SourceQuery&draftPage=1&newsPage=@Model.NewsPage&sourcePage=@Model.SourcePage&runPage=@Model.RunPage" class="button-link @(Model.DraftFilter == "failed" ? string.Empty : "secondary")">Failed (@Model.FailedDraftCount)</a>
+                <a href="/ops?sort=@Model.NewsSort&preview=@Model.PreviewMode&drafts=all&profile=@Model.EditorialProfileFilter&draftQuery=@Model.DraftQuery&newsQuery=@Model.NewsQuery&sourceQuery=@Model.SourceQuery&draftPage=1&newsPage=@Model.NewsPage&sourcePage=@Model.SourcePage&runPage=@Model.RunPage" class="button-link @(Model.DraftFilter == "all" ? string.Empty : "secondary")">All (@Model.TotalEditableDraftCount)</a>
+            </div>
+
+            <div class="preview-switch" style="margin-bottom: 16px; flex-wrap: wrap;">
+                <a href="/ops?sort=@Model.NewsSort&preview=@Model.PreviewMode&drafts=@Model.DraftFilter&profile=all&draftQuery=@Model.DraftQuery&newsQuery=@Model.NewsQuery&sourceQuery=@Model.SourceQuery&draftPage=1&newsPage=1&sourcePage=@Model.SourcePage&runPage=@Model.RunPage" class="button-link @(Model.EditorialProfileFilter == "all" ? string.Empty : "secondary")">All profiles</a>
+                <a href="/ops?sort=@Model.NewsSort&preview=@Model.PreviewMode&drafts=@Model.DraftFilter&profile=ai&draftQuery=@Model.DraftQuery&newsQuery=@Model.NewsQuery&sourceQuery=@Model.SourceQuery&draftPage=1&newsPage=1&sourcePage=@Model.SourcePage&runPage=@Model.RunPage" class="button-link @(Model.EditorialProfileFilter == "ai" ? string.Empty : "secondary")">General AI</a>
+                <a href="/ops?sort=@Model.NewsSort&preview=@Model.PreviewMode&drafts=@Model.DraftFilter&profile=dotnet&draftQuery=@Model.DraftQuery&newsQuery=@Model.NewsQuery&sourceQuery=@Model.SourceQuery&draftPage=1&newsPage=1&sourcePage=@Model.SourcePage&runPage=@Model.RunPage" class="button-link @(Model.EditorialProfileFilter == "dotnet" ? string.Empty : "secondary")">.NET / C#</a>
             </div>
 
             <form method="get" action="/ops" style="display: flex; align-items: end; gap: 10px; margin-bottom: 16px;">
                 <input type="hidden" name="sort" value="@Model.NewsSort" />
                 <input type="hidden" name="preview" value="@Model.PreviewMode" />
                 <input type="hidden" name="drafts" value="@Model.DraftFilter" />
+                <input type="hidden" name="profile" value="@Model.EditorialProfileFilter" />
                 <input type="hidden" name="newsQuery" value="@Model.NewsQuery" />
                 <input type="hidden" name="sourceQuery" value="@Model.SourceQuery" />
                 <input type="hidden" name="newsPage" value="@Model.NewsPage" />
@@ -165,6 +172,11 @@
                                     </div>
                                     <div class="meta-row">
                                         <span class="badge neutral">@draft.Tone tone</span>
+                                        <span class="badge neutral">@draftItem.EditorialProfileLabel</span>
+                                        @if (draftItem.LatestCuration is not null)
+                                        {
+                                            <span class="badge neutral">@draftItem.LatestCuration.Category</span>
+                                        }
                                         <span class="badge neutral">readability @quality.ReadabilityScore</span>
                                         <span class="badge neutral">hook @((editorial.HookType ?? "selected").Replace("_", " "))</span>
                                         <span class="badge @(draftItem.IsReadyToPublish ? "success" : "warning")">@draftItem.ReadinessLabel</span>
@@ -307,7 +319,73 @@ Source: @editorial.SourceLabel
                                     <div style="margin-top: 8px;">
                                         @(draftItem.PublishedWithImage ? "Published with image." : "Published as text-only.")
                                     </div>
+                                    @if (!string.IsNullOrWhiteSpace(draftItem.LatestPublication?.PlatformPostId))
+                                    {
+                                        <div class="muted" style="margin-top: 8px;">LinkedIn post id: @draftItem.LatestPublication.PlatformPostId</div>
+                                    }
                                 </div>
+                            }
+
+                            @if (draftItem.HasPublicationAudit)
+                            {
+                                <div class="flash" style="margin-top: 14px;">
+                                    <strong>Publication audit</strong>
+                                    @if (!string.IsNullOrWhiteSpace(draftItem.LatestPublicationSentText))
+                                    {
+                                        <div style="margin-top: 10px;">
+                                            <div class="muted" style="margin-bottom: 6px;">Sent post text</div>
+                                            <div style="white-space: pre-wrap;">@draftItem.LatestPublicationSentText</div>
+                                        </div>
+                                    }
+                                    @if (!string.IsNullOrWhiteSpace(draftItem.LatestPublicationRequestPayload))
+                                    {
+                                        <details style="margin-top: 10px;">
+                                            <summary style="cursor: pointer; font-weight: 600;">Request payload</summary>
+                                            <div style="margin-top: 8px; white-space: pre-wrap;">@draftItem.LatestPublicationRequestPayload</div>
+                                        </details>
+                                    }
+                                    @if (!string.IsNullOrWhiteSpace(draftItem.LatestPublicationResponsePayload))
+                                    {
+                                        <details style="margin-top: 10px;">
+                                            <summary style="cursor: pointer; font-weight: 600;">Response payload</summary>
+                                            <div style="margin-top: 8px; white-space: pre-wrap;">@draftItem.LatestPublicationResponsePayload</div>
+                                        </details>
+                                    }
+                                </div>
+                            }
+
+                            @if (draftItem.HasPublicationHistory)
+                            {
+                                <details style="margin-top: 14px;">
+                                    <summary style="cursor: pointer; font-weight: 600;">Publication attempts (@draftItem.PublicationHistory.Count)</summary>
+                                    <div class="list" style="margin-top: 12px;">
+                                        @foreach (var attempt in draftItem.PublicationHistory)
+                                        {
+                                            <article class="item" style="padding: 14px;">
+                                                <div class="item-header">
+                                                    <div>
+                                                        <strong>@attempt.Status</strong>
+                                                        <div class="muted" style="margin-top: 4px;">
+                                                            Attempt #@attempt.Id
+                                                            @if (attempt.PublishedAt.HasValue)
+                                                            {
+                                                                <text> • @attempt.PublishedAt.Value.LocalDateTime.ToString("dd/MM/yyyy HH:mm")</text>
+                                                            }
+                                                        </div>
+                                                    </div>
+                                                    @if (!string.IsNullOrWhiteSpace(attempt.PlatformPostId))
+                                                    {
+                                                        <span class="badge">@attempt.PlatformPostId</span>
+                                                    }
+                                                </div>
+                                                @if (!string.IsNullOrWhiteSpace(attempt.ErrorMessage))
+                                                {
+                                                    <div class="muted" style="margin-top: 8px; white-space: pre-wrap;">@attempt.ErrorMessage</div>
+                                                }
+                                            </article>
+                                        }
+                                    </div>
+                                </details>
                             }
 
                             <div class="inline-actions">
@@ -363,6 +441,15 @@ Source: @editorial.SourceLabel
                                         <button type="submit">Retry publish</button>
                                     </form>
                                 }
+
+                                @if (draft.Status != AiNewsCurator.Domain.Enums.DraftStatus.Published)
+                                {
+                                    <form method="post" action="/ops/drafts/@draft.Id/regenerate">
+                                        @Html.AntiForgeryToken()
+                                        <input type="hidden" name="returnUrl" value="@currentReturnUrl" />
+                                        <button type="submit" class="secondary">Regenerate draft</button>
+                                    </form>
+                                }
                             </div>
 
                             <details style="margin-top: 18px;">
@@ -395,12 +482,12 @@ Source: @editorial.SourceLabel
                     <div class="inline-actions" style="margin-top: 16px;">
                         @if (Model.DraftPage > 1)
                         {
-                            <a href="/ops?sort=@Model.NewsSort&preview=@Model.PreviewMode&drafts=@Model.DraftFilter&draftQuery=@Model.DraftQuery&newsQuery=@Model.NewsQuery&sourceQuery=@Model.SourceQuery&draftPage=@(Model.DraftPage - 1)&newsPage=@Model.NewsPage&sourcePage=@Model.SourcePage&runPage=@Model.RunPage" class="button-link secondary">Previous drafts</a>
+                            <a href="/ops?sort=@Model.NewsSort&preview=@Model.PreviewMode&drafts=@Model.DraftFilter&profile=@Model.EditorialProfileFilter&draftQuery=@Model.DraftQuery&newsQuery=@Model.NewsQuery&sourceQuery=@Model.SourceQuery&draftPage=@(Model.DraftPage - 1)&newsPage=@Model.NewsPage&sourcePage=@Model.SourcePage&runPage=@Model.RunPage" class="button-link secondary">Previous drafts</a>
                         }
                         <span class="muted">Draft page @Model.DraftPage of @Model.DraftTotalPages</span>
                         @if (Model.DraftPage < Model.DraftTotalPages)
                         {
-                            <a href="/ops?sort=@Model.NewsSort&preview=@Model.PreviewMode&drafts=@Model.DraftFilter&draftQuery=@Model.DraftQuery&newsQuery=@Model.NewsQuery&sourceQuery=@Model.SourceQuery&draftPage=@(Model.DraftPage + 1)&newsPage=@Model.NewsPage&sourcePage=@Model.SourcePage&runPage=@Model.RunPage" class="button-link secondary">Next drafts</a>
+                            <a href="/ops?sort=@Model.NewsSort&preview=@Model.PreviewMode&drafts=@Model.DraftFilter&profile=@Model.EditorialProfileFilter&draftQuery=@Model.DraftQuery&newsQuery=@Model.NewsQuery&sourceQuery=@Model.SourceQuery&draftPage=@(Model.DraftPage + 1)&newsPage=@Model.NewsPage&sourcePage=@Model.SourcePage&runPage=@Model.RunPage" class="button-link secondary">Next drafts</a>
                         }
                     </div>
                 }
@@ -416,6 +503,7 @@ Source: @editorial.SourceLabel
                 <form method="get" action="/ops" style="display: flex; align-items: end; gap: 10px;">
                     <input type="hidden" name="preview" value="@Model.PreviewMode" />
                     <input type="hidden" name="drafts" value="@Model.DraftFilter" />
+                    <input type="hidden" name="profile" value="@Model.EditorialProfileFilter" />
                     <input type="hidden" name="draftQuery" value="@Model.DraftQuery" />
                     <input type="hidden" name="newsQuery" value="@Model.NewsQuery" />
                     <input type="hidden" name="sourceQuery" value="@Model.SourceQuery" />
@@ -437,6 +525,7 @@ Source: @editorial.SourceLabel
                 <input type="hidden" name="sort" value="@Model.NewsSort" />
                 <input type="hidden" name="preview" value="@Model.PreviewMode" />
                 <input type="hidden" name="drafts" value="@Model.DraftFilter" />
+                <input type="hidden" name="profile" value="@Model.EditorialProfileFilter" />
                 <input type="hidden" name="draftQuery" value="@Model.DraftQuery" />
                 <input type="hidden" name="sourceQuery" value="@Model.SourceQuery" />
                 <input type="hidden" name="draftPage" value="@Model.DraftPage" />
@@ -503,6 +592,7 @@ Source: @editorial.SourceLabel
                         @if (item.LatestCuration is not null)
                         {
                             <p><strong>Curation:</strong> @item.LatestCuration.WhyRelevant</p>
+                            <p class="muted">Profile @item.EditorialProfileLabel • category @item.LatestCuration.Category</p>
                             <p class="muted">Relevance @item.LatestCuration.RelevanceScore.ToString("0.00") • confidence @item.LatestCuration.ConfidenceScore.ToString("0.00") • publish @(item.LatestCuration.ShouldPublish ? "yes" : "no")</p>
                         }
                         else
@@ -526,12 +616,12 @@ Source: @editorial.SourceLabel
                 <div class="inline-actions" style="margin-top: 16px;">
                     @if (Model.NewsPage > 1)
                     {
-                        <a href="/ops?sort=@Model.NewsSort&preview=@Model.PreviewMode&drafts=@Model.DraftFilter&draftQuery=@Model.DraftQuery&newsQuery=@Model.NewsQuery&sourceQuery=@Model.SourceQuery&draftPage=@Model.DraftPage&newsPage=@(Model.NewsPage - 1)&sourcePage=@Model.SourcePage&runPage=@Model.RunPage" class="button-link secondary">Previous news</a>
+                        <a href="/ops?sort=@Model.NewsSort&preview=@Model.PreviewMode&drafts=@Model.DraftFilter&profile=@Model.EditorialProfileFilter&draftQuery=@Model.DraftQuery&newsQuery=@Model.NewsQuery&sourceQuery=@Model.SourceQuery&draftPage=@Model.DraftPage&newsPage=@(Model.NewsPage - 1)&sourcePage=@Model.SourcePage&runPage=@Model.RunPage" class="button-link secondary">Previous news</a>
                     }
                     <span class="muted">News page @Model.NewsPage of @Model.NewsTotalPages</span>
                     @if (Model.NewsPage < Model.NewsTotalPages)
                     {
-                        <a href="/ops?sort=@Model.NewsSort&preview=@Model.PreviewMode&drafts=@Model.DraftFilter&draftQuery=@Model.DraftQuery&newsQuery=@Model.NewsQuery&sourceQuery=@Model.SourceQuery&draftPage=@Model.DraftPage&newsPage=@(Model.NewsPage + 1)&sourcePage=@Model.SourcePage&runPage=@Model.RunPage" class="button-link secondary">Next news</a>
+                        <a href="/ops?sort=@Model.NewsSort&preview=@Model.PreviewMode&drafts=@Model.DraftFilter&profile=@Model.EditorialProfileFilter&draftQuery=@Model.DraftQuery&newsQuery=@Model.NewsQuery&sourceQuery=@Model.SourceQuery&draftPage=@Model.DraftPage&newsPage=@(Model.NewsPage + 1)&sourcePage=@Model.SourcePage&runPage=@Model.RunPage" class="button-link secondary">Next news</a>
                     }
                 </div>
             }
@@ -599,6 +689,14 @@ Source: @editorial.SourceLabel
 
                 <div class="split">
                     <label>
+                        Editorial profile
+                        <select asp-for="CreateSource.EditorialProfile">
+                            <option value="ai">General AI</option>
+                            <option value="dotnet">.NET / C#</option>
+                            <option value="auto">Auto detect</option>
+                        </select>
+                    </label>
+                    <label>
                         Priority
                         <input asp-for="CreateSource.Priority" type="number" />
                     </label>
@@ -634,10 +732,12 @@ Source: @editorial.SourceLabel
 
         <section class="card">
             <h2 style="margin-bottom: 6px;">Configured sources</h2>
+            <div class="muted" style="margin-bottom: 14px;">The current editorial profile filter also applies to this source list.</div>
             <form method="get" action="/ops" style="display: flex; align-items: end; gap: 10px; margin-bottom: 16px;">
                 <input type="hidden" name="sort" value="@Model.NewsSort" />
                 <input type="hidden" name="preview" value="@Model.PreviewMode" />
                 <input type="hidden" name="drafts" value="@Model.DraftFilter" />
+                <input type="hidden" name="profile" value="@Model.EditorialProfileFilter" />
                 <input type="hidden" name="draftQuery" value="@Model.DraftQuery" />
                 <input type="hidden" name="newsQuery" value="@Model.NewsQuery" />
                 <input type="hidden" name="draftPage" value="@Model.DraftPage" />
@@ -657,6 +757,9 @@ Source: @editorial.SourceLabel
                             <div>
                                 <h3>@source.Source.Name</h3>
                                 <div class="muted">@source.Source.Type • priority @source.Source.Priority • max @source.Source.MaxItemsPerRun</div>
+                                <div class="meta-row" style="margin-top: 8px;">
+                                    <span class="badge neutral">@source.EditorialProfileLabel</span>
+                                </div>
                             </div>
                             <span class="badge">@(source.Source.IsActive ? "Active" : "Inactive")</span>
                         </div>
@@ -680,6 +783,14 @@ Source: @editorial.SourceLabel
                                 </label>
 
                                 <div class="split">
+                                    <label>
+                                        Editorial profile
+                                        <select name="EditForm.EditorialProfile">
+                                            <option value="ai" selected="@(source.EditForm.EditorialProfile == "ai")">General AI</option>
+                                            <option value="dotnet" selected="@(source.EditForm.EditorialProfile == "dotnet")">.NET / C#</option>
+                                            <option value="auto" selected="@(source.EditForm.EditorialProfile == "auto")">Auto detect</option>
+                                        </select>
+                                    </label>
                                     <label>
                                         Type
                                         <select name="EditForm.Type">
@@ -742,12 +853,12 @@ Source: @editorial.SourceLabel
                 <div class="inline-actions" style="margin-top: 16px;">
                     @if (Model.SourcePage > 1)
                     {
-                        <a href="/ops?sort=@Model.NewsSort&preview=@Model.PreviewMode&drafts=@Model.DraftFilter&draftQuery=@Model.DraftQuery&newsQuery=@Model.NewsQuery&sourceQuery=@Model.SourceQuery&draftPage=@Model.DraftPage&newsPage=@Model.NewsPage&sourcePage=@(Model.SourcePage - 1)&runPage=@Model.RunPage" class="button-link secondary">Previous sources</a>
+                        <a href="/ops?sort=@Model.NewsSort&preview=@Model.PreviewMode&drafts=@Model.DraftFilter&profile=@Model.EditorialProfileFilter&draftQuery=@Model.DraftQuery&newsQuery=@Model.NewsQuery&sourceQuery=@Model.SourceQuery&draftPage=@Model.DraftPage&newsPage=@Model.NewsPage&sourcePage=@(Model.SourcePage - 1)&runPage=@Model.RunPage" class="button-link secondary">Previous sources</a>
                     }
                     <span class="muted">Source page @Model.SourcePage of @Model.SourceTotalPages</span>
                     @if (Model.SourcePage < Model.SourceTotalPages)
                     {
-                        <a href="/ops?sort=@Model.NewsSort&preview=@Model.PreviewMode&drafts=@Model.DraftFilter&draftQuery=@Model.DraftQuery&newsQuery=@Model.NewsQuery&sourceQuery=@Model.SourceQuery&draftPage=@Model.DraftPage&newsPage=@Model.NewsPage&sourcePage=@(Model.SourcePage + 1)&runPage=@Model.RunPage" class="button-link secondary">Next sources</a>
+                        <a href="/ops?sort=@Model.NewsSort&preview=@Model.PreviewMode&drafts=@Model.DraftFilter&profile=@Model.EditorialProfileFilter&draftQuery=@Model.DraftQuery&newsQuery=@Model.NewsQuery&sourceQuery=@Model.SourceQuery&draftPage=@Model.DraftPage&newsPage=@Model.NewsPage&sourcePage=@(Model.SourcePage + 1)&runPage=@Model.RunPage" class="button-link secondary">Next sources</a>
                     }
                 </div>
             }
@@ -776,12 +887,12 @@ Source: @editorial.SourceLabel
                 <div class="inline-actions" style="margin-top: 16px;">
                     @if (Model.RunPage > 1)
                     {
-                        <a href="/ops?sort=@Model.NewsSort&preview=@Model.PreviewMode&drafts=@Model.DraftFilter&draftQuery=@Model.DraftQuery&newsQuery=@Model.NewsQuery&sourceQuery=@Model.SourceQuery&draftPage=@Model.DraftPage&newsPage=@Model.NewsPage&sourcePage=@Model.SourcePage&runPage=@(Model.RunPage - 1)" class="button-link secondary">Previous runs</a>
+                        <a href="/ops?sort=@Model.NewsSort&preview=@Model.PreviewMode&drafts=@Model.DraftFilter&profile=@Model.EditorialProfileFilter&draftQuery=@Model.DraftQuery&newsQuery=@Model.NewsQuery&sourceQuery=@Model.SourceQuery&draftPage=@Model.DraftPage&newsPage=@Model.NewsPage&sourcePage=@Model.SourcePage&runPage=@(Model.RunPage - 1)" class="button-link secondary">Previous runs</a>
                     }
                     <span class="muted">Run page @Model.RunPage of @Model.RunTotalPages</span>
                     @if (Model.RunPage < Model.RunTotalPages)
                     {
-                        <a href="/ops?sort=@Model.NewsSort&preview=@Model.PreviewMode&drafts=@Model.DraftFilter&draftQuery=@Model.DraftQuery&newsQuery=@Model.NewsQuery&sourceQuery=@Model.SourceQuery&draftPage=@Model.DraftPage&newsPage=@Model.NewsPage&sourcePage=@Model.SourcePage&runPage=@(Model.RunPage + 1)" class="button-link secondary">Next runs</a>
+                        <a href="/ops?sort=@Model.NewsSort&preview=@Model.PreviewMode&drafts=@Model.DraftFilter&profile=@Model.EditorialProfileFilter&draftQuery=@Model.DraftQuery&newsQuery=@Model.NewsQuery&sourceQuery=@Model.SourceQuery&draftPage=@Model.DraftPage&newsPage=@Model.NewsPage&sourcePage=@Model.SourcePage&runPage=@(Model.RunPage + 1)" class="button-link secondary">Next runs</a>
                     }
                 </div>
             }

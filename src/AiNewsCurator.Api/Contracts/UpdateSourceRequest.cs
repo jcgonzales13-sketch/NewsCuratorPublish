@@ -2,6 +2,7 @@ namespace AiNewsCurator.Api.Contracts;
 
 public sealed class UpdateSourceRequest
 {
+    public string EditorialProfile { get; set; } = "auto";
     public string Name { get; set; } = string.Empty;
     public string Type { get; set; } = "Rss";
     public string Url { get; set; } = string.Empty;

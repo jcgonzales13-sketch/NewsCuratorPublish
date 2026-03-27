@@ -1,4 +1,6 @@
 using System.Text.Json;
+using AiNewsCurator.Api.Controllers;
+using AiNewsCurator.Api.Contracts;
 using AiNewsCurator.Application.DTOs;
 using AiNewsCurator.Application.Services;
 using AiNewsCurator.Domain.Entities;
@@ -6,6 +8,7 @@ using AiNewsCurator.Domain.Enums;
 using AiNewsCurator.Domain.Interfaces;
 using AiNewsCurator.Infrastructure.Persistence;
 using AiNewsCurator.Infrastructure.Repositories;
+using Microsoft.AspNetCore.Mvc;
 using Microsoft.Extensions.Logging.Abstractions;
 using Microsoft.Extensions.Options;
 
@@ -229,6 +232,72 @@ public sealed class PipelineIntegrationTests : IAsyncLifetime
     }
 
     [Fact]
+    public async Task Regenerate_Draft_Should_Update_Existing_Draft_And_Move_It_Back_To_Pending_Approval()
+    {
+        var pipeline = CreatePipeline(
+            publishMode: "Manual",
+            collectedItems:
+            [
+                new CollectedNewsItem
+                {
+                    ExternalId = "item-regenerate-single",
+                    Title = "OpenAI refreshes orchestration guidance",
+                    Url = "https://example.com/news/openai-orchestration-guidance",
+                    CanonicalUrl = "https://example.com/news/openai-orchestration-guidance",
+                    PublishedAt = DateTimeOffset.UtcNow,
+                    Language = "en",
+                    RawSummary = "OpenAI refreshed orchestration guidance for delivery teams.",
+                    RawContent = "OpenAI refreshed orchestration guidance for delivery teams."
+                }
+            ],
+            aiResult: new AiEvaluationResult
+            {
+                IsRelevant = true,
+                RelevanceScore = 0.9,
+                ConfidenceScore = 0.86,
+                Category = "Agents",
+                WhyRelevant = "Operationally relevant.",
+                Summary = "Summary.",
+                KeyPoints = ["Point 1"],
+                LinkedInTitleSuggestion = "OpenAI updates orchestration guidance",
+                LinkedInDraft = "Initial draft body."
+            });
+
+        await pipeline.RunCollectAsync(new TriggerContext { TriggerType = TriggerType.Manual, InitiatedBy = "test" }, CancellationToken.None);
+        await pipeline.RunCurateAsync(new TriggerContext { TriggerType = TriggerType.Manual, InitiatedBy = "test" }, CancellationToken.None);
+
+        var draftId = await ExecuteInt64ScalarAsync("SELECT Id FROM PostDrafts ORDER BY Id DESC LIMIT 1", null);
+        var approved = await pipeline.ApproveDraftAsync(draftId, "test-approve", CancellationToken.None);
+
+        var updatedPipeline = CreatePipeline(
+            publishMode: "Manual",
+            collectedItems: [],
+            aiResult: new AiEvaluationResult
+            {
+                IsRelevant = true,
+                RelevanceScore = 0.91,
+                ConfidenceScore = 0.87,
+                Category = "Agents",
+                WhyRelevant = "Operationally relevant.",
+                Summary = "Updated summary.",
+                KeyPoints = ["Point 1"],
+                LinkedInTitleSuggestion = "OpenAI sharpens orchestration guidance",
+                LinkedInDraft = "Updated draft body with a more current angle."
+            });
+
+        var regenerated = await updatedPipeline.RegenerateDraftAsync(draftId, "test-regenerate", CancellationToken.None);
+        var title = await ExecuteStringScalarAsync("SELECT TitleSuggestion FROM PostDrafts WHERE Id = @Id", ("@Id", draftId));
+        var postText = await ExecuteStringScalarAsync("SELECT PostText FROM PostDrafts WHERE Id = @Id", ("@Id", draftId));
+        var status = await ExecuteScalarAsync("SELECT Status FROM PostDrafts WHERE Id = @Id", ("@Id", draftId));
+
+        Assert.True(approved);
+        Assert.True(regenerated);
+        Assert.Equal("OpenAI sharpens orchestration guidance", title);
+        Assert.Contains("Updated draft body with a more current angle.", postText);
+        Assert.Equal((int)DraftStatus.PendingApproval, status);
+    }
+
+    [Fact]
     public async Task Dismiss_Draft_Should_Remove_It_From_Pending_Queue()
     {
         var pipeline = CreatePipeline(
@@ -374,6 +443,115 @@ public sealed class PipelineIntegrationTests : IAsyncLifetime
         Assert.True(retryPublished);
         Assert.Equal((int)DraftStatus.Published, draftStatus);
         Assert.Equal(2, publicationCount);
+    }
+
+    [Fact]
+    public async Task Internal_Source_Api_Should_Apply_Editorial_Profile_Presets_On_Create_And_Update()
+    {
+        var controller = new InternalRunsController(
+            CreatePipeline(
+                publishMode: "Manual",
+                collectedItems: [],
+                aiResult: new AiEvaluationResult
+                {
+                    IsRelevant = true,
+                    RelevanceScore = 0.8,
+                    ConfidenceScore = 0.8,
+                    Category = "AI",
+                    WhyRelevant = "Test fixture.",
+                    Summary = "Test fixture.",
+                    KeyPoints = ["Point 1"],
+                    LinkedInTitleSuggestion = "Test",
+                    LinkedInDraft = "Test draft."
+                }),
+            new PostDraftRepository(_connectionFactory),
+            new ExecutionRunRepository(_connectionFactory),
+            new NewsItemRepository(_connectionFactory),
+            new CurationResultRepository(_connectionFactory),
+            new SourceRepository(_connectionFactory),
+            new NoOpImageEnrichmentService());
+
+        var createResult = await controller.CreateSource(
+            new CreateSourceRequest
+            {
+                EditorialProfile = "dotnet",
+                Name = "Test .NET Feed",
+                Type = "Rss",
+                Url = "https://example.com/dotnet/feed.xml",
+                Language = "en",
+                IsActive = true,
+                Priority = 7,
+                MaxItemsPerRun = 10,
+                IncludeKeywords = ["blazor"],
+                ExcludeKeywords = [],
+                Tags = ["official"]
+            },
+            CancellationToken.None);
+
+        var created = Assert.IsType<CreatedAtActionResult>(createResult);
+        var createdSourceResponse = Assert.IsType<SourceResponse>(created.Value);
+        var createdSource = createdSourceResponse.Source;
+        var createdTags = JsonSerializer.Deserialize<string[]>(createdSource.TagsJson) ?? [];
+        var createdKeywords = JsonSerializer.Deserialize<string[]>(createdSource.IncludeKeywordsJson) ?? [];
+
+        Assert.Equal("dotnet", createdSourceResponse.EditorialProfile);
+        Assert.Equal(".NET / C#", createdSourceResponse.EditorialProfileLabel);
+        Assert.Contains("official", createdTags, StringComparer.OrdinalIgnoreCase);
+        Assert.Contains("dotnet", createdTags, StringComparer.OrdinalIgnoreCase);
+        Assert.Contains("csharp", createdTags, StringComparer.OrdinalIgnoreCase);
+        Assert.Contains("blazor", createdKeywords, StringComparer.OrdinalIgnoreCase);
+        Assert.Contains(".net", createdKeywords, StringComparer.OrdinalIgnoreCase);
+        Assert.Contains("sdk", createdKeywords, StringComparer.OrdinalIgnoreCase);
+
+        var updateResult = await controller.UpdateSource(
+            createdSource.Id,
+            new UpdateSourceRequest
+            {
+                EditorialProfile = "ai",
+                Name = createdSource.Name,
+                Type = createdSource.Type.ToString(),
+                Url = createdSource.Url,
+                Language = createdSource.Language,
+                IsActive = createdSource.IsActive,
+                Priority = createdSource.Priority,
+                MaxItemsPerRun = createdSource.MaxItemsPerRun,
+                IncludeKeywords = ["workflow"],
+                ExcludeKeywords = [],
+                Tags = ["curated"]
+            },
+            CancellationToken.None);
+
+        var updated = Assert.IsType<OkObjectResult>(updateResult);
+        var updatedSourceResponse = Assert.IsType<SourceResponse>(updated.Value);
+        var updatedSource = updatedSourceResponse.Source;
+        var updatedTags = JsonSerializer.Deserialize<string[]>(updatedSource.TagsJson) ?? [];
+        var updatedKeywords = JsonSerializer.Deserialize<string[]>(updatedSource.IncludeKeywordsJson) ?? [];
+
+        Assert.Equal("dotnet", updatedSourceResponse.EditorialProfile);
+        Assert.Equal(".NET / C#", updatedSourceResponse.EditorialProfileLabel);
+        Assert.Contains("curated", updatedTags, StringComparer.OrdinalIgnoreCase);
+        Assert.Contains("ai", updatedTags, StringComparer.OrdinalIgnoreCase);
+        Assert.Contains("workflow", updatedKeywords, StringComparer.OrdinalIgnoreCase);
+        Assert.Contains("agent", updatedKeywords, StringComparer.OrdinalIgnoreCase);
+
+        var listResult = await controller.Sources(null, CancellationToken.None);
+        var listResponse = Assert.IsType<OkObjectResult>(listResult);
+        var listedSources = Assert.IsAssignableFrom<IReadOnlyList<SourceResponse>>(listResponse.Value);
+
+        Assert.Contains(listedSources, item =>
+            item.Source.Id == createdSource.Id &&
+            item.EditorialProfile == "dotnet" &&
+            item.EditorialProfileLabel == ".NET / C#");
+
+        var aiFilteredListResult = await controller.Sources("ai", CancellationToken.None);
+        var aiFilteredListResponse = Assert.IsType<OkObjectResult>(aiFilteredListResult);
+        var aiFilteredSources = Assert.IsAssignableFrom<IReadOnlyList<SourceResponse>>(aiFilteredListResponse.Value);
+        Assert.DoesNotContain(aiFilteredSources, item => item.Source.Id == createdSource.Id);
+
+        var dotnetFilteredListResult = await controller.Sources("dotnet", CancellationToken.None);
+        var dotnetFilteredListResponse = Assert.IsType<OkObjectResult>(dotnetFilteredListResult);
+        var dotnetFilteredSources = Assert.IsAssignableFrom<IReadOnlyList<SourceResponse>>(dotnetFilteredListResponse.Value);
+        Assert.Contains(dotnetFilteredSources, item => item.Source.Id == createdSource.Id);
     }
 
     [Fact]
@@ -537,6 +715,69 @@ public sealed class PipelineIntegrationTests : IAsyncLifetime
         Assert.NotNull(updated);
         Assert.Equal("https://example.com/images/manual-image.jpg", updated!.ImageUrl);
         Assert.Equal("Manual", updated.ImageOrigin);
+    }
+
+    [Fact]
+    public async Task PublicationRepository_Should_Return_History_For_Draft_In_Descending_Order()
+    {
+        var newsRepository = new NewsItemRepository(_connectionFactory);
+        var draftRepository = new PostDraftRepository(_connectionFactory);
+        var publicationRepository = new PublicationRepository(_connectionFactory);
+
+        var newsItemId = await newsRepository.InsertAsync(new NewsItem
+        {
+            SourceId = 1,
+            Title = "Publication history test",
+            Url = "https://example.com/news/publication-history",
+            CanonicalUrl = "https://example.com/news/publication-history",
+            PublishedAt = DateTimeOffset.UtcNow,
+            Language = "en",
+            RawSummary = "Summary",
+            RawContent = "Content",
+            ContentHash = "publication-history-content-hash",
+            TitleHash = "publication-history-title-hash",
+            Status = NewsItemStatus.Selected,
+            CreatedAt = DateTimeOffset.UtcNow,
+            UpdatedAt = DateTimeOffset.UtcNow
+        }, CancellationToken.None);
+
+        var draftId = await draftRepository.InsertAsync(new PostDraft
+        {
+            NewsItemId = newsItemId,
+            TitleSuggestion = "Publication history draft",
+            PostText = "Draft body",
+            Tone = "Editorial",
+            Status = DraftStatus.PendingApproval,
+            ValidationErrorsJson = "[]",
+            CreatedAt = DateTimeOffset.UtcNow
+        }, CancellationToken.None);
+
+        await publicationRepository.InsertAsync(new Publication
+        {
+            PostDraftId = draftId,
+            Platform = "LinkedIn",
+            RequestPayload = "{\"attempt\":1}",
+            ResponsePayload = "{}",
+            Status = PublicationStatus.Failed,
+            ErrorMessage = "first failure"
+        }, CancellationToken.None);
+
+        await publicationRepository.InsertAsync(new Publication
+        {
+            PostDraftId = draftId,
+            Platform = "LinkedIn",
+            PlatformPostId = "linkedin-post-42",
+            PublishedAt = DateTimeOffset.UtcNow,
+            RequestPayload = "{\"attempt\":2}",
+            ResponsePayload = "{\"id\":\"linkedin-post-42\"}",
+            Status = PublicationStatus.Published
+        }, CancellationToken.None);
+
+        var history = await publicationRepository.GetByDraftIdAsync(draftId, CancellationToken.None);
+
+        Assert.Equal(2, history.Count);
+        Assert.Equal(PublicationStatus.Published, history[0].Status);
+        Assert.Equal(PublicationStatus.Failed, history[1].Status);
     }
 
     private NewsPipelineService CreatePipeline(
@@ -710,6 +951,14 @@ public sealed class PipelineIntegrationTests : IAsyncLifetime
         public Task<OperationResult> RefreshAccessAsync(CancellationToken cancellationToken)
         {
             return Task.FromResult(OperationResult.Ok());
+        }
+    }
+
+    private sealed class NoOpImageEnrichmentService : INewsImageEnrichmentService
+    {
+        public Task<int> BackfillMissingImagesAsync(CancellationToken cancellationToken)
+        {
+            return Task.FromResult(0);
         }
     }
 }

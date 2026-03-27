@@ -197,38 +197,25 @@ public sealed class NewsPipelineService : INewsPipelineService
 
         foreach (var draft in drafts)
         {
-            var newsItem = await _newsItemRepository.GetByIdAsync(draft.NewsItemId, cancellationToken);
-            if (newsItem is null)
+            if (!await RegenerateDraftInternalAsync(draft, moveToPendingApproval: false, cancellationToken))
             {
                 continue;
             }
-
-            var evaluation = await _aiCurationService.EvaluateNewsAsync(newsItem, cancellationToken);
-            await CreateAndPersistCurationResultAsync(newsItem, evaluation, cancellationToken);
-            var generatedPost = evaluation.LinkedInDraft;
-            var editorialDraft = await ApplyEditorialMetadataAsync(newsItem, generatedPost, cancellationToken);
-            generatedPost = LinkedInEditorialPostFormatter.BuildPostText(editorialDraft);
-            var validation = await _aiCurationService.ValidatePostAsync(newsItem, generatedPost, cancellationToken);
-
-            draft.TitleSuggestion = !string.IsNullOrWhiteSpace(evaluation.LinkedInTitleSuggestion)
-                ? evaluation.LinkedInTitleSuggestion
-                : editorialDraft.Headline;
-            draft.PostText = generatedPost;
-            draft.Tone = _options.LinkedInTone;
-            draft.ValidationErrorsJson = JsonSerializer.Serialize(validation.Errors);
-
-            if (draft.Status == DraftStatus.Approved && !validation.IsValid)
-            {
-                draft.Status = DraftStatus.PendingApproval;
-                draft.ApprovedAt = null;
-                draft.ApprovedBy = null;
-            }
-
-            await _postDraftRepository.UpdateAsync(draft, cancellationToken);
             regeneratedCount++;
         }
 
         return regeneratedCount;
+    }
+
+    public async Task<bool> RegenerateDraftAsync(long draftId, string requestedBy, CancellationToken cancellationToken)
+    {
+        var draft = await _postDraftRepository.GetByIdAsync(draftId, cancellationToken);
+        if (draft is null || draft.Status == DraftStatus.Published)
+        {
+            return false;
+        }
+
+        return await RegenerateDraftInternalAsync(draft, moveToPendingApproval: true, cancellationToken);
     }
 
     public async Task<bool> ReprocessNewsItemAsync(long newsItemId, string requestedBy, CancellationToken cancellationToken)
@@ -560,5 +547,39 @@ public sealed class NewsPipelineService : INewsPipelineService
                 ? "Curated by AI News Curator."
                 : _options.AttributionFooterLine
         });
+    }
+
+    private async Task<bool> RegenerateDraftInternalAsync(PostDraft draft, bool moveToPendingApproval, CancellationToken cancellationToken)
+    {
+        var newsItem = await _newsItemRepository.GetByIdAsync(draft.NewsItemId, cancellationToken);
+        if (newsItem is null)
+        {
+            return false;
+        }
+
+        var evaluation = await _aiCurationService.EvaluateNewsAsync(newsItem, cancellationToken);
+        await CreateAndPersistCurationResultAsync(newsItem, evaluation, cancellationToken);
+        var generatedPost = evaluation.LinkedInDraft;
+        var editorialDraft = await ApplyEditorialMetadataAsync(newsItem, generatedPost, cancellationToken);
+        generatedPost = LinkedInEditorialPostFormatter.BuildPostText(editorialDraft);
+        var validation = await _aiCurationService.ValidatePostAsync(newsItem, generatedPost, cancellationToken);
+
+        draft.TitleSuggestion = !string.IsNullOrWhiteSpace(evaluation.LinkedInTitleSuggestion)
+            ? evaluation.LinkedInTitleSuggestion
+            : editorialDraft.Headline;
+        draft.PostText = generatedPost;
+        draft.Tone = _options.LinkedInTone;
+        draft.ValidationErrorsJson = JsonSerializer.Serialize(validation.Errors);
+
+        if (moveToPendingApproval ||
+            (draft.Status == DraftStatus.Approved && !validation.IsValid))
+        {
+            draft.Status = DraftStatus.PendingApproval;
+            draft.ApprovedAt = null;
+            draft.ApprovedBy = null;
+        }
+
+        await _postDraftRepository.UpdateAsync(draft, cancellationToken);
+        return true;
     }
 }

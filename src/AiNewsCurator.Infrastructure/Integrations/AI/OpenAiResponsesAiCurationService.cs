@@ -12,20 +12,24 @@ namespace AiNewsCurator.Infrastructure.Integrations.AI;
 public sealed class OpenAiResponsesAiCurationService : IAiCurationService
 {
     private readonly IHttpClientFactory _httpClientFactory;
+    private readonly ISourceRepository _sourceRepository;
     private readonly AppOptions _options;
 
-    public OpenAiResponsesAiCurationService(IHttpClientFactory httpClientFactory, IOptions<AppOptions> options)
+    public OpenAiResponsesAiCurationService(IHttpClientFactory httpClientFactory, ISourceRepository sourceRepository, IOptions<AppOptions> options)
     {
         _httpClientFactory = httpClientFactory;
+        _sourceRepository = sourceRepository;
         _options = options.Value;
     }
 
     public async Task<AiEvaluationResult> EvaluateNewsAsync(NewsItem newsItem, CancellationToken cancellationToken)
     {
+        var source = await _sourceRepository.GetByIdAsync(newsItem.SourceId, cancellationToken);
+        var profile = EditorialProfileResolver.Resolve(source, newsItem);
         var requestPayload = new
         {
             model = _options.AiModelName,
-            input = OpenAiPromptFactory.BuildEvaluationInput(newsItem, _options.LinkedInTone),
+            input = OpenAiPromptFactory.BuildEvaluationInput(newsItem, _options.LinkedInTone, source?.Name, profile.Name, profile.PromptInstruction),
             text = OpenAiPromptFactory.BuildStructuredTextFormat()
         };
 
@@ -41,7 +45,10 @@ public sealed class OpenAiResponsesAiCurationService : IAiCurationService
             WhatHappened = LinkedInEditorialPostFormatter.SanitizeSentence(structured.WhatHappened, 280),
             WhyItMatters = LinkedInEditorialPostFormatter.SanitizeSentence(structured.WhyItMatters, 280),
             StrategicTakeaway = LinkedInEditorialPostFormatter.SanitizeSentence(structured.StrategicTakeaway, 180),
-            SourceLabel = LinkedInEditorialPostFormatter.SanitizeSentence(structured.SourceLabel, 80),
+            SourceLabel = LinkedInEditorialPostFormatter.SanitizeSentence(
+                string.IsNullOrWhiteSpace(structured.SourceLabel) ? profile.SourceLabel : structured.SourceLabel,
+                80),
+            OriginalArticleUrl = newsItem.CanonicalUrl,
             Signature = LinkedInEditorialPostFormatter.SanitizeSentence(structured.Signature, 80)
         };
         editorialDraft = LinkedInEditorialRefiner.Refine(editorialDraft);
@@ -57,7 +64,7 @@ public sealed class OpenAiResponsesAiCurationService : IAiCurationService
             KeyPoints = structured.KeyPoints,
             LinkedInTitleSuggestion = editorialDraft.Headline,
             LinkedInDraft = LinkedInEditorialPostFormatter.BuildPostText(editorialDraft),
-            PromptVersion = "openai-responses-v1",
+            PromptVersion = $"openai-responses-{profile.Name}-v1",
             ModelName = _options.AiModelName,
             PromptPayload = JsonSerializer.Serialize(requestPayload),
             ResponsePayload = rawResponse

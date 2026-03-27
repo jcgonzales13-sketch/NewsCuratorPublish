@@ -6,4 +6,5 @@ public interface IPublicationRepository
 {
     Task<long> InsertAsync(Publication publication, CancellationToken cancellationToken);
     Task<Publication?> GetLatestByDraftIdAsync(long postDraftId, CancellationToken cancellationToken);
+    Task<IReadOnlyList<Publication>> GetByDraftIdAsync(long postDraftId, CancellationToken cancellationToken);
 }

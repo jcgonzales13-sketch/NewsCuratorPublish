@@ -18,8 +18,10 @@ public sealed class OperationsDraftViewModel
         ImageUrl = NewsItem?.ImageUrl ?? string.Empty
     };
     public NewsItem? NewsItem { get; init; }
+    public CurationResult? LatestCuration { get; init; }
     public string? SourceName { get; init; }
     public Publication? LatestPublication { get; init; }
+    public IReadOnlyList<Publication> PublicationHistory { get; init; } = [];
     public string? PostImageUrl => NewsItem?.ImageUrl;
     public string? PostImageOrigin => NewsItem?.ImageOrigin;
     public bool HasPostImage => !string.IsNullOrWhiteSpace(PostImageUrl);
@@ -33,10 +35,19 @@ public sealed class OperationsDraftViewModel
     public int CharacterCount => Draft.PostText.Length;
     public string ReadinessLabel => IsReadyToPublish ? "Ready to publish" : "Needs review";
     public string SourceUrl => NewsItem?.CanonicalUrl ?? NewsItem?.Url ?? string.Empty;
+    public string EditorialProfileLabel => BuildEditorialProfileLabel(LatestCuration?.PromptVersion);
     public string LatestPublicationFailureSummary => BuildLatestPublicationFailureSummary();
     public string? LatestPublicationTechnicalDetails => BuildLatestPublicationTechnicalDetails();
     public string LatestPublicationFailureCategory => BuildLatestPublicationFailureCategory();
     public string LatestPublicationFailureGuidance => BuildLatestPublicationFailureGuidance();
+    public string? LatestPublicationSentText => BuildLatestPublicationSentText();
+    public string? LatestPublicationRequestPayload => NormalizePayload(LatestPublication?.RequestPayload);
+    public string? LatestPublicationResponsePayload => NormalizePayload(LatestPublication?.ResponsePayload);
+    public bool HasPublicationAudit =>
+        !string.IsNullOrWhiteSpace(LatestPublicationSentText) ||
+        !string.IsNullOrWhiteSpace(LatestPublicationRequestPayload) ||
+        !string.IsNullOrWhiteSpace(LatestPublicationResponsePayload);
+    public bool HasPublicationHistory => PublicationHistory.Count > 0;
 
     public bool PublishedWithImage =>
         LatestPublication?.RequestPayload?.Contains("\"shareMediaCategory\":\"IMAGE\"", StringComparison.OrdinalIgnoreCase) == true;
@@ -149,6 +160,35 @@ public sealed class OperationsDraftViewModel
             LatestPublication?.ResponsePayload ?? string.Empty).ToLowerInvariant();
     }
 
+    private string? BuildLatestPublicationSentText()
+    {
+        var requestPayload = LatestPublication?.RequestPayload;
+        if (string.IsNullOrWhiteSpace(requestPayload))
+        {
+            return null;
+        }
+
+        try
+        {
+            using var document = JsonDocument.Parse(requestPayload);
+            var root = document.RootElement;
+            if (root.TryGetProperty("specificContent", out var specificContent) &&
+                specificContent.TryGetProperty("com.linkedin.ugc.ShareContent", out var shareContent) &&
+                shareContent.TryGetProperty("shareCommentary", out var shareCommentary) &&
+                shareCommentary.TryGetProperty("text", out var textElement) &&
+                textElement.ValueKind == JsonValueKind.String)
+            {
+                var text = textElement.GetString()?.Trim();
+                return string.IsNullOrWhiteSpace(text) ? null : text;
+            }
+        }
+        catch (JsonException)
+        {
+        }
+
+        return null;
+    }
+
     private static bool TryReadProperty(JsonElement root, string propertyName, out string value)
     {
         if (root.ValueKind == JsonValueKind.Object &&
@@ -166,5 +206,25 @@ public sealed class OperationsDraftViewModel
     private static bool ContainsAny(string value, params string[] fragments)
     {
         return fragments.Any(fragment => value.Contains(fragment, StringComparison.Ordinal));
+    }
+
+    private static string BuildEditorialProfileLabel(string? promptVersion)
+    {
+        if (string.IsNullOrWhiteSpace(promptVersion))
+        {
+            return "General AI";
+        }
+
+        if (promptVersion.Contains("dotnet", StringComparison.OrdinalIgnoreCase))
+        {
+            return ".NET / C#";
+        }
+
+        return "General AI";
+    }
+
+    private static string? NormalizePayload(string? payload)
+    {
+        return string.IsNullOrWhiteSpace(payload) ? null : payload.Trim();
     }
 }

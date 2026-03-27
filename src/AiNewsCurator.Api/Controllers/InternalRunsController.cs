@@ -139,6 +139,13 @@ public sealed class InternalRunsController : ControllerBase
         return success ? Ok(new { reopened = true }) : NotFound();
     }
 
+    [HttpPost("drafts/{id:long}/regenerate")]
+    public async Task<IActionResult> Regenerate(long id, CancellationToken cancellationToken)
+    {
+        var success = await _pipelineService.RegenerateDraftAsync(id, "reviewer", cancellationToken);
+        return success ? Ok(new { regenerated = true }) : NotFound();
+    }
+
     [HttpGet("runs")]
     public async Task<IActionResult> Runs(CancellationToken cancellationToken)
     {
@@ -183,16 +190,39 @@ public sealed class InternalRunsController : ControllerBase
     }
 
     [HttpGet("sources")]
-    public async Task<IActionResult> Sources(CancellationToken cancellationToken)
+    public async Task<IActionResult> Sources([FromQuery] string? profile = null, CancellationToken cancellationToken = default)
     {
         var sources = await _sourceRepository.GetAllAsync(cancellationToken);
-        return Ok(sources);
+        var profileFilter = NormalizeEditorialProfileFilter(profile);
+        var response = sources
+            .Select(BuildSourceResponse)
+            .Where(source => MatchesEditorialProfileFilter(source.EditorialProfile, profileFilter))
+            .ToList();
+        return Ok(response);
     }
 
     [HttpPost("sources")]
     public async Task<IActionResult> CreateSource([FromBody] CreateSourceRequest request, CancellationToken cancellationToken)
     {
-        if (!SourceInputMapper.TryBuildSource(request.Name, request.Type, request.Url, request.Language, request.IsActive, request.Priority, request.MaxItemsPerRun, request.IncludeKeywords, request.ExcludeKeywords, request.Tags, out var source, out var error))
+        var sourceKeywords = SourceInputMapper.ApplyEditorialProfile(
+            request.EditorialProfile,
+            request.IncludeKeywords,
+            request.ExcludeKeywords,
+            request.Tags);
+
+        if (!SourceInputMapper.TryBuildSource(
+                request.Name,
+                request.Type,
+                request.Url,
+                request.Language,
+                request.IsActive,
+                request.Priority,
+                request.MaxItemsPerRun,
+                sourceKeywords.IncludeKeywords,
+                sourceKeywords.ExcludeKeywords,
+                sourceKeywords.Tags,
+                out var source,
+                out var error))
         {
             return BadRequest(new { error });
         }
@@ -201,7 +231,7 @@ public sealed class InternalRunsController : ControllerBase
         source.UpdatedAt = DateTimeOffset.UtcNow;
         var sourceId = await _sourceRepository.InsertAsync(source, cancellationToken);
         source.Id = sourceId;
-        return CreatedAtAction(nameof(Sources), new { id = sourceId }, source);
+        return CreatedAtAction(nameof(Sources), new { id = sourceId }, BuildSourceResponse(source));
     }
 
     [HttpPut("sources/{id:long}")]
@@ -213,7 +243,25 @@ public sealed class InternalRunsController : ControllerBase
             return NotFound();
         }
 
-        if (!SourceInputMapper.TryBuildSource(request.Name, request.Type, request.Url, request.Language, request.IsActive, request.Priority, request.MaxItemsPerRun, request.IncludeKeywords, request.ExcludeKeywords, request.Tags, out var updated, out var error))
+        var sourceKeywords = SourceInputMapper.ApplyEditorialProfile(
+            request.EditorialProfile,
+            request.IncludeKeywords,
+            request.ExcludeKeywords,
+            request.Tags);
+
+        if (!SourceInputMapper.TryBuildSource(
+                request.Name,
+                request.Type,
+                request.Url,
+                request.Language,
+                request.IsActive,
+                request.Priority,
+                request.MaxItemsPerRun,
+                sourceKeywords.IncludeKeywords,
+                sourceKeywords.ExcludeKeywords,
+                sourceKeywords.Tags,
+                out var updated,
+                out var error))
         {
             return BadRequest(new { error });
         }
@@ -222,7 +270,7 @@ public sealed class InternalRunsController : ControllerBase
         updated.CreatedAt = existing.CreatedAt;
         updated.UpdatedAt = DateTimeOffset.UtcNow;
         await _sourceRepository.UpdateAsync(updated, cancellationToken);
-        return Ok(updated);
+        return Ok(BuildSourceResponse(updated));
     }
 
     [HttpPost("sources/{id:long}/deactivate")]
@@ -237,6 +285,36 @@ public sealed class InternalRunsController : ControllerBase
         existing.IsActive = false;
         existing.UpdatedAt = DateTimeOffset.UtcNow;
         await _sourceRepository.UpdateAsync(existing, cancellationToken);
-        return Ok(existing);
+        return Ok(BuildSourceResponse(existing));
+    }
+
+    private static SourceResponse BuildSourceResponse(Source source)
+    {
+        return new SourceResponse
+        {
+            Source = source,
+            EditorialProfile = SourceInputMapper.ResolveEditorialProfile(source),
+            EditorialProfileLabel = SourceInputMapper.ResolveEditorialProfileLabel(source)
+        };
+    }
+
+    private static string NormalizeEditorialProfileFilter(string? profile)
+    {
+        return profile?.Trim().ToLowerInvariant() switch
+        {
+            "ai" => "ai",
+            "dotnet" => "dotnet",
+            _ => "all"
+        };
+    }
+
+    private static bool MatchesEditorialProfileFilter(string resolvedProfile, string filter)
+    {
+        return filter switch
+        {
+            "ai" => string.Equals(resolvedProfile, "ai", StringComparison.OrdinalIgnoreCase),
+            "dotnet" => string.Equals(resolvedProfile, "dotnet", StringComparison.OrdinalIgnoreCase),
+            _ => true
+        };
     }
 }

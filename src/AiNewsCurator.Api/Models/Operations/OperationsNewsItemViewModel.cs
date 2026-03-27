@@ -14,4 +14,20 @@ public sealed class OperationsNewsItemViewModel
     public bool IsPublishedToLinkedIn { get; init; }
     public DateTimeOffset? LinkedInPublishedAt { get; init; }
     public string? LinkedInPostId { get; init; }
+    public string EditorialProfileLabel => BuildEditorialProfileLabel(LatestCuration?.PromptVersion);
+
+    private static string BuildEditorialProfileLabel(string? promptVersion)
+    {
+        if (string.IsNullOrWhiteSpace(promptVersion))
+        {
+            return "General AI";
+        }
+
+        if (promptVersion.Contains("dotnet", StringComparison.OrdinalIgnoreCase))
+        {
+            return ".NET / C#";
+        }
+
+        return "General AI";
+    }
 }

@@ -29,6 +29,7 @@ A .NET 8 application that collects AI and developer news from RSS feeds, stores 
 - Draft review workflow with `Approve`, `Reject`, `Dismiss`, `Reopen`, and `Retry publish`
 - Draft editing in `/ops`
 - Source creation, editing, activation, and deactivation in `/ops`
+- Editorial profile hints for sources in `/ops` and the internal source API
 - Search and pagination for drafts, news, sources, and runs
 - Failure classification and retry guidance for failed LinkedIn publishes
 - Automatic inclusion of `Original article: ...` in LinkedIn post text
@@ -99,8 +100,10 @@ The dashboard supports:
 - approving, rejecting, dismissing, reopening, publishing, and retrying failed drafts
 - viewing LinkedIn validation and refresh actions
 - searching drafts, news, and sources
+- filtering drafts and news by editorial profile
 - paginating drafts, news, sources, and runs independently
 - managing sources
+- selecting `General AI`, `.NET / C#`, or `Auto detect` when creating or editing sources
 - adding a manual image URL when a news item has no captured image
 - preserving current filter/page context after actions
 
@@ -153,6 +156,82 @@ Example:
 ```bash
 curl -X POST http://localhost:5138/internal/run/daily -H "X-API-Key: changeme"
 ```
+
+Create a source with an explicit editorial lane:
+
+```bash
+curl -X POST http://localhost:5138/internal/sources \
+  -H "X-API-Key: changeme" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "editorialProfile": "dotnet",
+    "name": ".NET Blog",
+    "type": "Rss",
+    "url": "https://devblogs.microsoft.com/dotnet/feed/",
+    "language": "en",
+    "isActive": true,
+    "priority": 8,
+    "maxItemsPerRun": 10,
+    "includeKeywords": ["blazor"],
+    "excludeKeywords": [],
+    "tags": ["official"]
+  }'
+```
+
+Update a source and keep the profile explicit:
+
+```bash
+curl -X PUT http://localhost:5138/internal/sources/1 \
+  -H "X-API-Key: changeme" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "editorialProfile": "ai",
+    "name": "OpenAI News",
+    "type": "Rss",
+    "url": "https://openai.com/news/rss.xml",
+    "language": "en",
+    "isActive": true,
+    "priority": 10,
+    "maxItemsPerRun": 10,
+    "includeKeywords": ["workflow"],
+    "excludeKeywords": [],
+    "tags": ["official"]
+  }'
+```
+
+`editorialProfile` accepts:
+
+- `ai`
+- `dotnet`
+- `auto`
+
+The API and `/ops` use this as a non-destructive hint. It merges profile-specific tags and include-keywords into whatever you already send instead of overwriting custom source settings.
+
+Source endpoints now return a response shape like this:
+
+```json
+{
+  "source": {
+    "id": 7,
+    "name": ".NET Blog",
+    "type": "Rss",
+    "url": "https://devblogs.microsoft.com/dotnet/feed/",
+    "language": "en",
+    "isActive": true,
+    "priority": 8,
+    "maxItemsPerRun": 10,
+    "includeKeywordsJson": "[\"blazor\",\".net\",\"dotnet\",\"c#\",\"asp.net core\",\"runtime\",\"sdk\"]",
+    "excludeKeywordsJson": "[]",
+    "tagsJson": "[\"official\",\"dotnet\",\"csharp\"]",
+    "createdAt": "2026-03-27T12:00:00.0000000+00:00",
+    "updatedAt": "2026-03-27T12:00:00.0000000+00:00"
+  },
+  "editorialProfile": "dotnet",
+  "editorialProfileLabel": ".NET / C#"
+}
+```
+
+`GET /internal/sources` returns a list of that same object shape.
 
 To start local LinkedIn OAuth:
 
@@ -216,6 +295,7 @@ The project includes both unit and integration coverage for important flows, inc
 - RSS summary sanitization with image extraction
 - collection, curation, publishing, dismiss/reopen, retry publish, and source repository flows
 - manual image persistence on news items
+- internal source API create/update behavior for editorial profile presets
 
 Run the full suite with:
 

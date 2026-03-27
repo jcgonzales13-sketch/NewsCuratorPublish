@@ -103,6 +103,7 @@ public sealed class OperationsController : Controller
         [FromQuery] string? sort = null,
         [FromQuery] string? preview = null,
         [FromQuery] string? drafts = null,
+        [FromQuery] string? profile = null,
         [FromQuery] string? draftQuery = null,
         [FromQuery] string? newsQuery = null,
         [FromQuery] string? sourceQuery = null,
@@ -123,31 +124,37 @@ public sealed class OperationsController : Controller
         var runs = await _executionRunRepository.GetRecentAsync(normalizedRunPage * sectionPageSize, cancellationToken);
         var sources = await _sourceRepository.GetAllAsync(cancellationToken);
         var sourceMap = sources.ToDictionary(source => source.Id, source => source.Name);
-        var news = await _newsItemRepository.GetRecentAsync(normalizedNewsPage * sectionPageSize, cancellationToken);
+        var recentNews = await _newsItemRepository.GetRecentAsync(Math.Max(normalizedNewsPage * sectionPageSize * 10, 100), cancellationToken);
         var linkedInStatus = await _linkedInAuthService.GetStatusAsync(cancellationToken);
         var selectedDraftFilter = NormalizeDraftFilter(drafts);
+        var selectedEditorialProfileFilter = NormalizeEditorialProfileFilter(profile);
         var normalizedDraftQuery = NormalizeSearchQuery(draftQuery);
         var normalizedNewsQuery = NormalizeSearchQuery(newsQuery);
         var normalizedSourceQuery = NormalizeSearchQuery(sourceQuery);
         var filteredDrafts = FilterDrafts(allDrafts, selectedDraftFilter);
         filteredDrafts = FilterDraftsByQuery(filteredDrafts, normalizedDraftQuery);
-        var pagedDrafts = Paginate(filteredDrafts, normalizedDraftPage, sectionPageSize, out var draftTotalPages);
 
-        var draftItems = new List<OperationsDraftViewModel>(pagedDrafts.Count);
-        foreach (var draft in pagedDrafts)
+        var allDraftItems = new List<OperationsDraftViewModel>(filteredDrafts.Count);
+        foreach (var draft in filteredDrafts)
         {
             var newsItem = await _newsItemRepository.GetByIdAsync(draft.NewsItemId, cancellationToken);
-            draftItems.Add(new OperationsDraftViewModel
+            var publicationHistory = await _publicationRepository.GetByDraftIdAsync(draft.Id, cancellationToken);
+            var latestCuration = await _curationResultRepository.GetLatestByNewsItemIdAsync(draft.NewsItemId, cancellationToken);
+            allDraftItems.Add(new OperationsDraftViewModel
             {
                 Draft = draft,
                 NewsItem = newsItem,
+                LatestCuration = latestCuration,
                 SourceName = newsItem is not null && sourceMap.TryGetValue(newsItem.SourceId, out var sourceName) ? sourceName : null,
-                LatestPublication = await _publicationRepository.GetLatestByDraftIdAsync(draft.Id, cancellationToken)
+                LatestPublication = publicationHistory.FirstOrDefault(),
+                PublicationHistory = publicationHistory
             });
         }
+        var draftItems = FilterDraftItemsByEditorialProfile(allDraftItems, selectedEditorialProfileFilter);
+        var pagedDraftItems = Paginate(draftItems, normalizedDraftPage, sectionPageSize, out var draftTotalPages);
 
-        var newsItems = new List<OperationsNewsItemViewModel>(news.Count);
-        foreach (var item in news)
+        var newsItems = new List<OperationsNewsItemViewModel>(recentNews.Count);
+        foreach (var item in recentNews)
         {
             var latestCuration = await _curationResultRepository.GetLatestByNewsItemIdAsync(item.Id, cancellationToken);
             var draftsByNewsItem = await _postDraftRepository.GetByNewsItemIdAsync(item.Id, cancellationToken);
@@ -167,6 +174,7 @@ public sealed class OperationsController : Controller
         var previewMode = NormalizePreviewMode(preview);
         newsItems = SortNewsItems(newsItems, selectedSort);
         newsItems = FilterNewsItemsByQuery(newsItems, normalizedNewsQuery);
+        newsItems = FilterNewsItemsByEditorialProfile(newsItems, selectedEditorialProfileFilter);
         var pagedNewsItems = Paginate(newsItems, normalizedNewsPage, sectionPageSize, out var newsTotalPages);
         var sourceItems = sources
             .OrderByDescending(source => source.IsActive)
@@ -177,16 +185,18 @@ public sealed class OperationsController : Controller
             })
             .ToList();
         sourceItems = FilterSourcesByQuery(sourceItems, normalizedSourceQuery);
+        sourceItems = FilterSourceItemsByEditorialProfile(sourceItems, selectedEditorialProfileFilter);
         var pagedSourceItems = Paginate(sourceItems, normalizedSourcePage, sectionPageSize, out var sourceTotalPages);
         var pagedRuns = Paginate(runs.ToList(), normalizedRunPage, sectionPageSize, out var runTotalPages);
 
         return View(new OperationsDashboardViewModel
         {
-            Drafts = draftItems,
+            Drafts = pagedDraftItems,
             Runs = pagedRuns,
             Sources = pagedSourceItems,
             NewsItems = pagedNewsItems,
             DraftFilter = selectedDraftFilter,
+            EditorialProfileFilter = selectedEditorialProfileFilter,
             DraftQuery = normalizedDraftQuery,
             NewsQuery = normalizedNewsQuery,
             SourceQuery = normalizedSourceQuery,
@@ -338,10 +348,25 @@ public sealed class OperationsController : Controller
         return RedirectToReturnUrl(returnUrl);
     }
 
+    [HttpPost("/ops/drafts/{id:long}/regenerate")]
+    [ValidateAntiForgeryToken]
+    public async Task<IActionResult> RegenerateDraft(long id, [FromForm] string? returnUrl = null, CancellationToken cancellationToken = default)
+    {
+        var success = await _pipelineService.RegenerateDraftAsync(id, "ops-ui", cancellationToken);
+        SetFlash(success ? "Draft regenerated from the latest news item data." : "Unable to regenerate the draft.", !success);
+        return RedirectToReturnUrl(returnUrl);
+    }
+
     [HttpPost("/ops/sources")]
     [ValidateAntiForgeryToken]
     public async Task<IActionResult> CreateSource([Bind(Prefix = "CreateSource")] CreateSourceFormModel model, [FromForm] string? returnUrl = null, CancellationToken cancellationToken = default)
     {
+        var sourceKeywords = SourceInputMapper.ApplyEditorialProfile(
+            model.EditorialProfile,
+            SourceInputMapper.ParseCsv(model.IncludeKeywords),
+            SourceInputMapper.ParseCsv(model.ExcludeKeywords),
+            SourceInputMapper.ParseCsv(model.Tags));
+
         if (!SourceInputMapper.TryBuildSource(
                 model.Name,
                 model.Type,
@@ -350,9 +375,9 @@ public sealed class OperationsController : Controller
                 model.IsActive,
                 model.Priority,
                 model.MaxItemsPerRun,
-                SourceInputMapper.ParseCsv(model.IncludeKeywords),
-                SourceInputMapper.ParseCsv(model.ExcludeKeywords),
-                SourceInputMapper.ParseCsv(model.Tags),
+                sourceKeywords.IncludeKeywords,
+                sourceKeywords.ExcludeKeywords,
+                sourceKeywords.Tags,
                 out var source,
                 out var error))
         {
@@ -396,6 +421,12 @@ public sealed class OperationsController : Controller
             return RedirectToReturnUrl(returnUrl);
         }
 
+        var sourceKeywords = SourceInputMapper.ApplyEditorialProfile(
+            model.EditorialProfile,
+            SourceInputMapper.ParseCsv(model.IncludeKeywords),
+            SourceInputMapper.ParseCsv(model.ExcludeKeywords),
+            SourceInputMapper.ParseCsv(model.Tags));
+
         if (!SourceInputMapper.TryBuildSource(
                 model.Name,
                 model.Type,
@@ -404,9 +435,9 @@ public sealed class OperationsController : Controller
                 model.IsActive,
                 model.Priority,
                 model.MaxItemsPerRun,
-                SourceInputMapper.ParseCsv(model.IncludeKeywords),
-                SourceInputMapper.ParseCsv(model.ExcludeKeywords),
-                SourceInputMapper.ParseCsv(model.Tags),
+                sourceKeywords.IncludeKeywords,
+                sourceKeywords.ExcludeKeywords,
+                sourceKeywords.Tags,
                 out var source,
                 out var error))
         {
@@ -559,6 +590,16 @@ public sealed class OperationsController : Controller
         };
     }
 
+    private static string NormalizeEditorialProfileFilter(string? profile)
+    {
+        return profile?.Trim().ToLowerInvariant() switch
+        {
+            "ai" => "ai",
+            "dotnet" => "dotnet",
+            _ => "all"
+        };
+    }
+
     private static List<Domain.Entities.PostDraft> FilterDrafts(IEnumerable<Domain.Entities.PostDraft> drafts, string filter)
     {
         return filter switch
@@ -604,6 +645,55 @@ public sealed class OperationsController : Controller
                 ContainsIgnoreCase(item.SourceName, query) ||
                 ContainsIgnoreCase(item.LatestCuration?.WhyRelevant, query))
             .ToList();
+    }
+
+    private static List<OperationsDraftViewModel> FilterDraftItemsByEditorialProfile(IEnumerable<OperationsDraftViewModel> items, string profile)
+    {
+        if (string.Equals(profile, "all", StringComparison.Ordinal))
+        {
+            return items.ToList();
+        }
+
+        return items
+            .Where(item => MatchesEditorialProfileFilter(item.LatestCuration?.PromptVersion, profile))
+            .ToList();
+    }
+
+    private static List<OperationsNewsItemViewModel> FilterNewsItemsByEditorialProfile(IEnumerable<OperationsNewsItemViewModel> items, string profile)
+    {
+        if (string.Equals(profile, "all", StringComparison.Ordinal))
+        {
+            return items.ToList();
+        }
+
+        return items
+            .Where(item => MatchesEditorialProfileFilter(item.LatestCuration?.PromptVersion, profile))
+            .ToList();
+    }
+
+    private static List<OperationsSourceViewModel> FilterSourceItemsByEditorialProfile(IEnumerable<OperationsSourceViewModel> items, string profile)
+    {
+        if (string.Equals(profile, "all", StringComparison.Ordinal))
+        {
+            return items.ToList();
+        }
+
+        return items
+            .Where(item => MatchesEditorialProfileFilter(SourceInputMapper.ResolveEditorialProfile(item.Source), profile))
+            .ToList();
+    }
+
+    private static bool MatchesEditorialProfileFilter(string? promptVersion, string profile)
+    {
+        var isDotNet = !string.IsNullOrWhiteSpace(promptVersion) &&
+                       promptVersion.Contains("dotnet", StringComparison.OrdinalIgnoreCase);
+
+        return profile switch
+        {
+            "dotnet" => isDotNet,
+            "ai" => !isDotNet,
+            _ => true
+        };
     }
 
     private static List<OperationsSourceViewModel> FilterSourcesByQuery(IEnumerable<OperationsSourceViewModel> items, string query)

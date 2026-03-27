@@ -7,53 +7,60 @@ namespace AiNewsCurator.Infrastructure.Integrations.AI;
 
 public sealed class HeuristicAiCurationService : IAiCurationService
 {
-    private static readonly string[] PriorityKeywords =
-    [
-        "ai", "artificial intelligence", "inteligencia artificial", "llm", "model",
-        "agent", "openai", "anthropic", "google", "microsoft", "nvidia", "regulation"
-    ];
+    private readonly ISourceRepository _sourceRepository;
 
-    public Task<AiEvaluationResult> EvaluateNewsAsync(NewsItem newsItem, CancellationToken cancellationToken)
+    public HeuristicAiCurationService(ISourceRepository sourceRepository)
     {
+        _sourceRepository = sourceRepository;
+    }
+
+    public async Task<AiEvaluationResult> EvaluateNewsAsync(NewsItem newsItem, CancellationToken cancellationToken)
+    {
+        var source = await _sourceRepository.GetByIdAsync(newsItem.SourceId, cancellationToken);
+        var profile = EditorialProfileResolver.Resolve(source, newsItem);
         var corpus = $"{newsItem.Title} {newsItem.RawSummary} {newsItem.RawContent}".ToLowerInvariant();
-        var hits = PriorityKeywords.Count(corpus.Contains);
-        var relevance = Math.Clamp(0.55 + (hits * 0.04), 0.0, 0.98);
-        var confidence = Math.Clamp(0.65 + (hits * 0.02), 0.0, 0.95);
+        var hits = profile.HeuristicKeywords.Count(corpus.Contains);
+        var relevanceBase = profile.Name == "dotnet" ? 0.63 : 0.55;
+        var confidenceBase = profile.Name == "dotnet" ? 0.69 : 0.65;
+        var relevance = Math.Clamp(relevanceBase + (hits * 0.04), 0.0, 0.98);
+        var confidence = Math.Clamp(confidenceBase + (hits * 0.02), 0.0, 0.95);
         var keyPoints = new[]
         {
             $"The headline development is: {newsItem.Title}.",
-            "The topic is directly tied to AI and has practical relevance for professionals.",
-            "It is worth watching how this evolves for technology, product, and business teams."
+            $"The topic is relevant to {profile.Audience}.",
+            "It is worth watching how this evolves for engineering, product, and operational teams."
         };
 
         var payload = JsonSerializer.Serialize(new
         {
             newsItem.Title,
             newsItem.CanonicalUrl,
-            newsItem.RawSummary
+            newsItem.RawSummary,
+            Profile = profile.Name,
+            Source = source?.Name
         });
 
-        return Task.FromResult(new AiEvaluationResult
+        return new AiEvaluationResult
         {
             IsRelevant = relevance >= 0.75,
             RelevanceScore = relevance,
-            ConfidenceScore = confidence,
+            ConfidenceScore = confidence + (profile.Name == "dotnet" ? 0.02 : 0.0),
             Category = DetectCategory(corpus),
-            WhyRelevant = "This story is relevant to technology and business professionals because it signals a meaningful AI development with practical implications.",
+            WhyRelevant = profile.HeuristicWhyRelevant,
             Summary = newsItem.RawSummary ?? newsItem.Title,
             KeyPoints = keyPoints,
-            LinkedInTitleSuggestion = BuildEditorialDraft(newsItem).Headline,
-            LinkedInDraft = BuildDraft(newsItem),
-            PromptVersion = "heuristic-v1",
+            LinkedInTitleSuggestion = BuildEditorialDraft(newsItem, profile).Headline,
+            LinkedInDraft = BuildDraft(newsItem, profile),
+            PromptVersion = $"heuristic-{profile.Name}-v1",
             ModelName = "local-heuristic",
             PromptPayload = payload,
-            ResponsePayload = JsonSerializer.Serialize(new { relevance, confidence, keyPoints })
-        });
+            ResponsePayload = JsonSerializer.Serialize(new { relevance, confidence, profile = profile.Name, keyPoints })
+        };
     }
 
     public Task<string> GenerateLinkedInPostAsync(NewsItem newsItem, CurationResult curationResult, CancellationToken cancellationToken)
     {
-        return Task.FromResult(BuildDraft(newsItem));
+        return GenerateDraftInternalAsync(newsItem, cancellationToken);
     }
 
     public Task<PostValidationResult> ValidatePostAsync(NewsItem newsItem, string postText, CancellationToken cancellationToken)
@@ -61,8 +68,25 @@ public sealed class HeuristicAiCurationService : IAiCurationService
         return Task.FromResult(PostQualityValidator.Validate(postText));
     }
 
+    private Task<string> GenerateDraftInternalAsync(NewsItem newsItem, CancellationToken cancellationToken)
+    {
+        return BuildDraftAsync(newsItem, cancellationToken);
+    }
+
+    private async Task<string> BuildDraftAsync(NewsItem newsItem, CancellationToken cancellationToken)
+    {
+        var source = await _sourceRepository.GetByIdAsync(newsItem.SourceId, cancellationToken);
+        var profile = EditorialProfileResolver.Resolve(source, newsItem);
+        return BuildDraft(newsItem, profile);
+    }
+
     private static string DetectCategory(string corpus)
     {
+        if (corpus.Contains(".net") || corpus.Contains("dotnet") || corpus.Contains("c#") || corpus.Contains("asp.net"))
+        {
+            return "Developer Tools";
+        }
+
         if (corpus.Contains("regulation"))
         {
             return "Regulation";
@@ -81,24 +105,24 @@ public sealed class HeuristicAiCurationService : IAiCurationService
         return "AI";
     }
 
-    private static string BuildDraft(NewsItem newsItem)
+    private static string BuildDraft(NewsItem newsItem, EditorialProfile profile)
     {
-        return LinkedInEditorialPostFormatter.BuildPostText(BuildEditorialDraft(newsItem));
+        return LinkedInEditorialPostFormatter.BuildPostText(BuildEditorialDraft(newsItem, profile));
     }
 
-    private static LinkedInEditorialDraft BuildEditorialDraft(NewsItem newsItem)
+    private static LinkedInEditorialDraft BuildEditorialDraft(NewsItem newsItem, EditorialProfile profile)
     {
         var title = LinkedInEditorialPostFormatter.SanitizeSentence(newsItem.Title, 90);
         var summary = LinkedInEditorialPostFormatter.SanitizeSentence(newsItem.RawSummary ?? newsItem.Title, 220);
         var draft = new LinkedInEditorialDraft
         {
             Headline = title,
-            Hook = "The bigger story here is how quickly AI products are moving toward real execution inside everyday workflows.",
-            HookType = "market_signal",
+            Hook = profile.HeuristicHook,
+            HookType = profile.Name == "dotnet" ? "workflow_change" : "market_signal",
             WhatHappened = summary,
-            WhyItMatters = "This moves AI closer to workflow execution instead of just assistance. That matters because teams can judge task completion and operational automation in real environments.",
-            StrategicTakeaway = "The real shift is that AI is becoming an execution layer inside workflows, not just a conversational layer on top of them.",
-            SourceLabel = "Original reporting",
+            WhyItMatters = profile.HeuristicWhyItMatters,
+            StrategicTakeaway = profile.HeuristicTakeaway,
+            SourceLabel = profile.SourceLabel,
             OriginalArticleUrl = newsItem.CanonicalUrl,
             Signature = "Curated by AI News Curator."
         };
