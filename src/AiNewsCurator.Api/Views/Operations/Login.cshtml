@@ -3,9 +3,25 @@
     ViewData["Title"] = "Operations Login";
 }
 
+<style>
+    .ops-login-loading {
+        display: none;
+        margin-top: 12px;
+    }
+
+    .ops-login-loading.active {
+        display: block;
+    }
+</style>
+
 <div style="min-height: 85vh; display: grid; place-items: center;">
     <div class="card" style="width: min(460px, 100%);">
-        <h1 style="margin-top: 0;">AI News Curator Ops</h1>
+        <div class="brand-lockup" style="margin-bottom: 12px;">
+            <img src="~/favicon.png" alt="AI News Curator logo" class="brand-logo" />
+            <div>
+                <h1 style="margin-top: 0; margin-bottom: 0;">AI News Curator Ops</h1>
+            </div>
+        </div>
         <p class="muted">Enter the internal API key to access the operations area.</p>
 
         @if (!string.IsNullOrWhiteSpace(Model.ErrorMessage))
@@ -25,6 +41,31 @@
             <div class="actions" style="margin-top: 16px;">
                 <button type="submit">Sign in</button>
             </div>
+            <div id="ops-login-loading" class="ops-login-loading muted">Signing in... Please wait.</div>
         </form>
     </div>
 </div>
+
+<script>
+    (() => {
+        const form = document.querySelector('form[method="post"]');
+        const loading = document.getElementById('ops-login-loading');
+        if (!form || !loading) {
+            return;
+        }
+
+        form.addEventListener('submit', event => {
+            if (form.dataset.loadingActive === 'true') {
+                event.preventDefault();
+                return;
+            }
+
+            form.dataset.loadingActive = 'true';
+            loading.classList.add('active');
+
+            for (const button of form.querySelectorAll('button, input[type="submit"]')) {
+                button.disabled = true;
+            }
+        });
+    })();
+</script>
