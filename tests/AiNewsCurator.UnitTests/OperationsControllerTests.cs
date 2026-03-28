@@ -28,6 +28,17 @@ public sealed class OperationsControllerTests
     }
 
     [Fact]
+    public void Login_Get_Should_Show_Session_Expired_Message()
+    {
+        var controller = CreateController(isAuthenticated: false);
+
+        var result = Assert.IsType<ViewResult>(controller.Login("/ops", null, null, "session-expired"));
+        var model = Assert.IsType<OperationsLoginViewModel>(result.Model);
+
+        Assert.Equal("Your session expired. Please sign in again.", model.InfoMessage);
+    }
+
+    [Fact]
     public async Task RequestCode_Should_Return_Verify_View_With_Generic_Message()
     {
         var opsAuthService = new FakeOpsAuthService
@@ -180,7 +191,7 @@ public sealed class OperationsControllerTests
         var result = Assert.IsType<RedirectResult>(await controller.ValidateLinkedIn("/ops", CancellationToken.None));
 
         Assert.Equal("/ops", result.Url);
-        Assert.Equal("LinkedIn validation failed: token expired", controller.TempData["FlashMessage"]);
+        Assert.Equal("LinkedIn authorization expired or lost permission. Reconnect LinkedIn and validate the connection again.", controller.TempData["FlashMessage"]);
         Assert.Equal("error", controller.TempData["FlashType"]);
     }
 

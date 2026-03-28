@@ -180,6 +180,46 @@ public sealed class NewsPipelineServiceTests
         Assert.Contains("Original article: https://example.com/openai-workflows", postDraftRepository.UpdatedDraft?.PostText);
     }
 
+    [Fact]
+    public async Task RunCollect_Should_Skip_Failing_Source_And_Continue()
+    {
+        var sourceRepository = new FakeSourceRepository(
+            new Source
+            {
+                Id = 1,
+                Name = "Blocked Feed",
+                Type = SourceType.Rss,
+                Url = "https://example.com/blocked.xml",
+                Language = "en",
+                IsActive = true,
+                MaxItemsPerRun = 10
+            },
+            new Source
+            {
+                Id = 2,
+                Name = "Working Feed",
+                Type = SourceType.Rss,
+                Url = "https://example.com/working.xml",
+                Language = "en",
+                IsActive = true,
+                MaxItemsPerRun = 10
+            });
+        var newsItemRepository = new FakeNewsItemRepository();
+        var service = CreateService(
+            collectors:
+            [
+                new ThrowingCollector(1),
+                new SuccessfulCollector(2)
+            ],
+            sourceRepository: sourceRepository,
+            newsItemRepository: newsItemRepository);
+
+        var collected = await service.RunCollectAsync(new TriggerContext { TriggerType = TriggerType.Manual, InitiatedBy = "ops-ui" }, CancellationToken.None);
+
+        Assert.Equal(1, collected);
+        Assert.Equal("Working item", newsItemRepository.NewsItem?.Title);
+    }
+
     private static NewsPipelineService CreateService(
         string publishMode = "Manual",
         IEnumerable<INewsCollector>? collectors = null,
@@ -216,14 +256,63 @@ public sealed class NewsPipelineServiceTests
             NullLogger<NewsPipelineService>.Instance);
     }
 
-    private sealed class FakeSourceRepository : ISourceRepository
+    private sealed class FakeSourceRepository(params Source[] sources) : ISourceRepository
     {
-        public Task<IReadOnlyList<Source>> GetAllAsync(CancellationToken cancellationToken) => Task.FromResult<IReadOnlyList<Source>>([]);
-        public Task<IReadOnlyList<Source>> GetActiveAsync(CancellationToken cancellationToken) => Task.FromResult<IReadOnlyList<Source>>([]);
-        public Task<Source?> GetByIdAsync(long id, CancellationToken cancellationToken) => Task.FromResult<Source?>(new Source { Id = id, Name = "OpenAI News" });
+        private readonly IReadOnlyList<Source> _sources = sources.Length == 0 ? [new Source { Id = 1, Name = "OpenAI News", IsActive = true, Type = SourceType.Rss }] : sources;
+
+        public Task<IReadOnlyList<Source>> GetAllAsync(CancellationToken cancellationToken) => Task.FromResult(_sources);
+        public Task<IReadOnlyList<Source>> GetActiveAsync(CancellationToken cancellationToken) => Task.FromResult<IReadOnlyList<Source>>(_sources.Where(source => source.IsActive).ToList());
+        public Task<Source?> GetByIdAsync(long id, CancellationToken cancellationToken) => Task.FromResult(_sources.FirstOrDefault(source => source.Id == id) ?? new Source { Id = id, Name = "OpenAI News" });
         public Task<long> InsertAsync(Source source, CancellationToken cancellationToken) => Task.FromResult(1L);
         public Task SeedDefaultsAsync(CancellationToken cancellationToken) => Task.CompletedTask;
         public Task UpdateAsync(Source source, CancellationToken cancellationToken) => Task.CompletedTask;
+    }
+
+    private sealed class ThrowingCollector : INewsCollector
+    {
+        private readonly long _sourceId;
+
+        public ThrowingCollector(long sourceId)
+        {
+            _sourceId = sourceId;
+        }
+
+        public bool CanHandle(Source source) => source.Id == _sourceId;
+
+        public Task<IReadOnlyList<CollectedNewsItem>> CollectAsync(Source source, CancellationToken cancellationToken)
+        {
+            throw new HttpRequestException("Forbidden", null, System.Net.HttpStatusCode.Forbidden);
+        }
+    }
+
+    private sealed class SuccessfulCollector : INewsCollector
+    {
+        private readonly long _sourceId;
+
+        public SuccessfulCollector(long sourceId)
+        {
+            _sourceId = sourceId;
+        }
+
+        public bool CanHandle(Source source) => source.Id == _sourceId;
+
+        public Task<IReadOnlyList<CollectedNewsItem>> CollectAsync(Source source, CancellationToken cancellationToken)
+        {
+            return Task.FromResult<IReadOnlyList<CollectedNewsItem>>(
+            [
+                new CollectedNewsItem
+                {
+                    ExternalId = "item-1",
+                    Title = "Working item",
+                    Url = "https://example.com/news/working-item",
+                    CanonicalUrl = "https://example.com/news/working-item",
+                    PublishedAt = DateTimeOffset.UtcNow,
+                    Language = "en",
+                    RawSummary = "Summary",
+                    RawContent = "Summary"
+                }
+            ]);
+        }
     }
 
     private sealed class FakeNewsItemRepository : INewsItemRepository

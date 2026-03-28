@@ -113,7 +113,31 @@ public sealed class ApiControllersAndMiddlewareTests
 
         Assert.False(invoked);
         Assert.Equal(StatusCodes.Status302Found, context.Response.StatusCode);
-        Assert.Equal("/ops/login?returnUrl=%2Fops%3Fdrafts%3Dreview", context.Response.Headers.Location.ToString());
+        Assert.Equal("/ops/login?reason=session-expired&returnUrl=%2Fops%3Fdrafts%3Dreview", context.Response.Headers.Location.ToString());
+    }
+
+    [Fact]
+    public async Task OperationsAccessMiddleware_Should_Use_SeeOther_For_Unauthenticated_Post_Request()
+    {
+        var invoked = false;
+        var context = new DefaultHttpContext();
+        context.Request.Method = HttpMethods.Post;
+        context.Request.Path = "/ops/actions/daily";
+        context.RequestServices = new ServiceCollection()
+            .AddSingleton<IAuthenticationService>(new FakeAuthenticationService())
+            .BuildServiceProvider();
+
+        var middleware = new OperationsAccessMiddleware(_ =>
+        {
+            invoked = true;
+            return Task.CompletedTask;
+        });
+
+        await middleware.InvokeAsync(context);
+
+        Assert.False(invoked);
+        Assert.Equal(StatusCodes.Status303SeeOther, context.Response.StatusCode);
+        Assert.Equal("/ops/login?reason=session-expired&returnUrl=%2Fops%2Factions%2Fdaily", context.Response.Headers.Location.ToString());
     }
 
     [Fact]

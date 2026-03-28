@@ -35,6 +35,11 @@ public sealed class OperationsAccessMiddleware
         }
 
         var returnUrl = $"{context.Request.Path}{context.Request.QueryString}";
-        context.Response.Redirect($"/ops/login?returnUrl={Uri.EscapeDataString(returnUrl)}");
+        var loginUrl = $"/ops/login?reason=session-expired&returnUrl={Uri.EscapeDataString(returnUrl)}";
+        context.Response.Redirect(loginUrl, permanent: false);
+        if (!HttpMethods.IsGet(context.Request.Method))
+        {
+            context.Response.StatusCode = StatusCodes.Status303SeeOther;
+        }
     }
 }

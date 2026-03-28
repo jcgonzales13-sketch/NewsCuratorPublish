@@ -130,7 +130,17 @@ public sealed class NewsPipelineService : INewsPipelineService
                 continue;
             }
 
-            var items = await collector.CollectAsync(source, cancellationToken);
+            IReadOnlyList<CollectedNewsItem> items;
+            try
+            {
+                items = await collector.CollectAsync(source, cancellationToken);
+            }
+            catch (Exception ex)
+            {
+                _logger.LogWarning(ex, "Collection failed for source {SourceId} ({SourceName}). Skipping source.", source.Id, source.Name);
+                continue;
+            }
+
             foreach (var item in items.Take(source.MaxItemsPerRun))
             {
                 var canonicalUrl = UrlNormalization.Normalize(item.CanonicalUrl);

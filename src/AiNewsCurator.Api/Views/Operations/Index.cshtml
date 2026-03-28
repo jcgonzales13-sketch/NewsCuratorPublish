@@ -155,6 +155,10 @@
         <div class="stat-value">@(Model.LinkedInStatus.HasAccessToken ? "OK" : "Pending")</div>
         <div>LinkedIn</div>
         <div class="muted">@((Model.LinkedInStatus.MemberName ?? "Account not connected"))</div>
+        @if (Model.LinkedInStatus.IsConfigured && !Model.LinkedInStatus.HasAccessToken)
+        {
+            <div class="muted" style="margin-top: 8px;">Reconnect LinkedIn to restore publishing access.</div>
+        }
     </article>
 </section>
 
@@ -761,6 +765,10 @@ Source: @editorial.SourceLabel
                     <div><strong>Member:</strong> @(Model.LinkedInStatus.MemberName ?? "-")</div>
                     <div><strong>Email:</strong> @(Model.LinkedInStatus.MemberEmail ?? "-")</div>
                     <div><strong>Updated:</strong> @(Model.LinkedInStatus.TokenUpdatedAt?.LocalDateTime.ToString("dd/MM/yyyy HH:mm") ?? "-")</div>
+                    @if (Model.LinkedInStatus.IsConfigured && !Model.LinkedInStatus.HasAccessToken)
+                    {
+                        <div class="flash error" style="margin-top: 12px; margin-bottom: 0;">LinkedIn authorization is missing or expired. Reconnect the account before publishing again.</div>
+                    }
                     <div class="inline-actions" style="margin-top: 14px;">
                         <form method="post" action="/ops/linkedin/validate">
                             @Html.AntiForgeryToken()

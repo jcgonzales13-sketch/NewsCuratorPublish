@@ -60,7 +60,7 @@ public sealed class OperationsController : Controller
     }
 
     [HttpGet("/ops/login")]
-    public IActionResult Login([FromQuery] string? returnUrl = null, [FromQuery] string? email = null, [FromQuery] string? step = null)
+    public IActionResult Login([FromQuery] string? returnUrl = null, [FromQuery] string? email = null, [FromQuery] string? step = null, [FromQuery] string? reason = null)
     {
         if (User.Identity?.IsAuthenticated == true)
         {
@@ -71,7 +71,10 @@ public sealed class OperationsController : Controller
         {
             Email = OpsAuthEmailNormalizer.Normalize(email),
             ReturnUrl = SanitizeReturnUrl(returnUrl),
-            Step = NormalizeLoginStep(step)
+            Step = NormalizeLoginStep(step),
+            InfoMessage = string.Equals(reason, "session-expired", StringComparison.OrdinalIgnoreCase)
+                ? "Your session expired. Please sign in again."
+                : null
         });
     }
 
@@ -339,7 +342,7 @@ public sealed class OperationsController : Controller
     public async Task<IActionResult> PublishDraft(long id, [FromForm] string? returnUrl = null, CancellationToken cancellationToken = default)
     {
         var success = await _pipelineService.PublishDraftAsync(id, GetCurrentOpsActor(), cancellationToken);
-        SetFlash(success ? "Draft published on LinkedIn." : "Unable to publish the draft.", !success);
+        SetFlash(success ? "Draft published on LinkedIn." : BuildLinkedInFailureMessage(null), !success);
         return RedirectToReturnUrl(returnUrl);
     }
 
@@ -539,7 +542,7 @@ public sealed class OperationsController : Controller
         SetFlash(
             result.Success
                 ? "LinkedIn credentials validated successfully."
-                : $"LinkedIn validation failed: {result.ErrorMessage}",
+                : BuildLinkedInFailureMessage(result.ErrorMessage),
             !result.Success);
         return RedirectToReturnUrl(returnUrl);
     }
@@ -552,7 +555,7 @@ public sealed class OperationsController : Controller
         SetFlash(
             result.Success
                 ? "LinkedIn access token refreshed successfully."
-                : $"LinkedIn refresh failed: {result.ErrorMessage}",
+                : BuildLinkedInFailureMessage(result.ErrorMessage),
             !result.Success);
         return RedirectToReturnUrl(returnUrl);
     }
@@ -839,6 +842,33 @@ public sealed class OperationsController : Controller
     private string? GetUserAgent()
     {
         return Request.Headers.UserAgent.ToString();
+    }
+
+    private static string BuildLinkedInFailureMessage(string? errorMessage)
+    {
+        if (RequiresLinkedInReconnect(errorMessage))
+        {
+            return "LinkedIn authorization expired or lost permission. Reconnect LinkedIn and validate the connection again.";
+        }
+
+        return string.IsNullOrWhiteSpace(errorMessage)
+            ? "Unable to publish the draft."
+            : $"LinkedIn request failed: {errorMessage}";
+    }
+
+    private static bool RequiresLinkedInReconnect(string? errorMessage)
+    {
+        if (string.IsNullOrWhiteSpace(errorMessage))
+        {
+            return false;
+        }
+
+        return errorMessage.Contains("403", StringComparison.OrdinalIgnoreCase) ||
+               errorMessage.Contains("401", StringComparison.OrdinalIgnoreCase) ||
+               errorMessage.Contains("forbidden", StringComparison.OrdinalIgnoreCase) ||
+               errorMessage.Contains("unauthorized", StringComparison.OrdinalIgnoreCase) ||
+               errorMessage.Contains("refresh token is not available", StringComparison.OrdinalIgnoreCase) ||
+               errorMessage.Contains("expired", StringComparison.OrdinalIgnoreCase);
     }
 
     private static void ApplyDraftEdits(PostDraft draft, UpdateDraftFormModel model, PostValidationResult validation)
