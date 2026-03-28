@@ -16,5 +16,6 @@ internal sealed class AiStructuredOutput
     public string WhyItMatters { get; set; } = string.Empty;
     public string StrategicTakeaway { get; set; } = string.Empty;
     public string SourceLabel { get; set; } = string.Empty;
+    public string Hashtags { get; set; } = string.Empty;
     public string Signature { get; set; } = string.Empty;
 }

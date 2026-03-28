@@ -48,6 +48,7 @@ public sealed class OpenAiResponsesAiCurationService : IAiCurationService
             SourceLabel = LinkedInEditorialPostFormatter.SanitizeSentence(
                 string.IsNullOrWhiteSpace(structured.SourceLabel) ? profile.SourceLabel : structured.SourceLabel,
                 80),
+            Hashtags = structured.Hashtags,
             OriginalArticleUrl = newsItem.CanonicalUrl,
             Signature = LinkedInEditorialPostFormatter.SanitizeSentence(structured.Signature, 80)
         };

@@ -15,12 +15,14 @@ public sealed class LinkedInEditorialPostFormatterTests
             WhyItMatters = "This affects developer workflows and release readiness.",
             StrategicTakeaway = "The bigger signal is that tooling speed is becoming a product advantage.",
             SourceLabel = ".NET Blog",
+            Hashtags = "#DotNet #CSharp #DeveloperTools",
             OriginalArticleUrl = "https://devblogs.microsoft.com/dotnet/example-post/",
             Signature = "Curated by AI News Curator."
         };
 
         var postText = LinkedInEditorialPostFormatter.BuildPostText(draft);
 
+        Assert.Contains("Hashtags: #DotNet #CSharp #DeveloperTools", postText, StringComparison.Ordinal);
         Assert.Contains("Original article: https://devblogs.microsoft.com/dotnet/example-post/", postText, StringComparison.Ordinal);
     }
 
@@ -44,6 +46,8 @@ public sealed class LinkedInEditorialPostFormatterTests
 
             Source: .NET Blog
 
+            Hashtags: #DotNet #CSharp #DeveloperTools
+
             Original article: https://devblogs.microsoft.com/dotnet/example-post/
 
             Curated by AI News Curator.
@@ -51,6 +55,7 @@ public sealed class LinkedInEditorialPostFormatterTests
 
         var parsed = LinkedInEditorialPostFormatter.Parse(postText);
 
+        Assert.Equal("#DotNet #CSharp #DeveloperTools", parsed.Hashtags);
         Assert.Equal("https://devblogs.microsoft.com/dotnet/example-post/", parsed.OriginalArticleUrl);
         Assert.Equal("Curated by AI News Curator.", parsed.Signature);
     }

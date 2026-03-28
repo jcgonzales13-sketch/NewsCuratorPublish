@@ -340,6 +340,12 @@
 @editorial.StrategicTakeaway
 
 Source: @editorial.SourceLabel
+@if (!string.IsNullOrWhiteSpace(editorial.Hashtags))
+{
+<text>
+
+@editorial.Hashtags</text>
+}
 @editorial.Signature</div>
                                 </div>
                             }
@@ -369,6 +375,10 @@ Source: @editorial.SourceLabel
                                     <div class="editorial-block">
                                         <h4>Source</h4>
                                         <p>@editorial.SourceLabel</p>
+                                        @if (!string.IsNullOrWhiteSpace(editorial.Hashtags))
+                                        {
+                                            <p class="muted" style="margin-top: 8px;">@editorial.Hashtags</p>
+                                        }
                                         @if (!string.IsNullOrWhiteSpace(editorial.Signature))
                                         {
                                             <p class="muted" style="margin-top: 8px;">@editorial.Signature</p>

@@ -123,10 +123,48 @@ public sealed class HeuristicAiCurationService : IAiCurationService
             WhyItMatters = profile.HeuristicWhyItMatters,
             StrategicTakeaway = profile.HeuristicTakeaway,
             SourceLabel = profile.SourceLabel,
+            Hashtags = BuildHashtags(newsItem, profile),
             OriginalArticleUrl = newsItem.CanonicalUrl,
             Signature = "Curated by AI News Curator."
         };
 
         return LinkedInEditorialRefiner.Refine(draft);
+    }
+
+    private static string BuildHashtags(NewsItem newsItem, EditorialProfile profile)
+    {
+        var hashtags = new List<string>();
+        if (profile.Name == "dotnet")
+        {
+            hashtags.AddRange(["#DotNet", "#CSharp"]);
+        }
+        else
+        {
+            hashtags.Add("#AI");
+        }
+
+        var corpus = $"{newsItem.Title} {newsItem.RawSummary} {newsItem.RawContent}".ToLowerInvariant();
+        if (corpus.Contains("agent"))
+        {
+            hashtags.Add("#Agents");
+        }
+        if (corpus.Contains("developer") || corpus.Contains("code"))
+        {
+            hashtags.Add("#DeveloperTools");
+        }
+        if (corpus.Contains("asp.net") || corpus.Contains("blazor"))
+        {
+            hashtags.Add("#AspNetCore");
+        }
+        if (corpus.Contains("runtime") || corpus.Contains("sdk"))
+        {
+            hashtags.Add("#DevPlatform");
+        }
+        if (corpus.Contains("workflow") || corpus.Contains("automation"))
+        {
+            hashtags.Add("#Automation");
+        }
+
+        return string.Join(' ', hashtags.Distinct(StringComparer.OrdinalIgnoreCase).Take(5));
     }
 }

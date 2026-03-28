@@ -32,7 +32,7 @@ internal static class OpenAiPromptFactory
                     "- Be factual, clear, and publication-ready.\n" +
                     "- Assess relevance, confidence, category, and key points.\n" +
                     "- Relevance must be judged against the editorial profile, not only generic AI coverage.\n" +
-                    "- Also produce a structured LinkedIn draft with these exact sections: headline, hook, whatHappened, whyItMatters, strategicTakeaway, sourceLabel, signature.\n" +
+                    "- Also produce a structured LinkedIn draft with these exact sections: headline, hook, whatHappened, whyItMatters, strategicTakeaway, sourceLabel, hashtags, signature.\n" +
                     "- Internally generate multiple candidates before choosing the final result: 3 headlines, 3 hooks from different hook types, 2 whatHappened options, 2 whyItMatters options, and 3 strategic takeaways.\n" +
                     "- Return only the selected final draft, plus hookType.\n" +
                     "- Allowed hookType values: strategic_shift, market_signal, product_implication, workflow_change, ecosystem_signal.\n" +
@@ -44,6 +44,7 @@ internal static class OpenAiPromptFactory
                     "- whyItMatters: 1 to 2 concise sentences focused on practical relevance, and include at least one concrete consequence such as workflow execution, task completion, developer workflows, user trust, or operational automation.\n" +
                     "- strategicTakeaway: exactly 1 or 2 short sentences with a sharper interpretation or market signal.\n" +
                     "- sourceLabel: clean publication/source attribution without a URL.\n" +
+                    "- hashtags: 3 to 5 short, relevant LinkedIn hashtags separated by spaces, such as #AI #DotNet. No sentence, no punctuation besides hashtag prefixes.\n" +
                     "- signature: short and subtle.\n" +
                     "- Avoid repeating the headline in the hook.\n" +
                     "- Avoid generic phrases such as: A practical AI signal worth tracking, One story that stood out today, At a practical level, What makes this relevant is, This is worth watching, This may have implications, This is an important development, This highlights innovation, This signals change in the industry, It will be interesting to see.\n" +
@@ -87,6 +88,7 @@ internal static class OpenAiPromptFactory
                         whyItMatters = new { type = "string" },
                         strategicTakeaway = new { type = "string" },
                         sourceLabel = new { type = "string" },
+                        hashtags = new { type = "string" },
                         signature = new { type = "string" }
                     },
                     required = new[]
@@ -105,6 +107,7 @@ internal static class OpenAiPromptFactory
                         "whyItMatters",
                         "strategicTakeaway",
                         "sourceLabel",
+                        "hashtags",
                         "signature"
                     }
                 }

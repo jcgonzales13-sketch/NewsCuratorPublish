@@ -22,6 +22,7 @@ public static class LinkedInEditorialRefiner
             WhyItMatters = LinkedInEditorialPostFormatter.SanitizeSentence(draft.WhyItMatters, 320),
             StrategicTakeaway = LinkedInEditorialPostFormatter.SanitizeSentence(ShortenToTwoSentences(draft.StrategicTakeaway), 220),
             SourceLabel = LinkedInEditorialPostFormatter.SanitizeSentence(draft.SourceLabel, 80),
+            Hashtags = NormalizeHashtags(draft.Hashtags),
             OriginalArticleUrl = draft.OriginalArticleUrl?.Trim() ?? string.Empty,
             Signature = LinkedInEditorialPostFormatter.SanitizeSentence(draft.Signature, 80)
         };
@@ -125,5 +126,26 @@ public static class LinkedInEditorialRefiner
         return sentences.Length == 0
             ? text
             : string.Join(". ", sentences) + ".";
+    }
+
+    private static string NormalizeHashtags(string? hashtags)
+    {
+        if (string.IsNullOrWhiteSpace(hashtags))
+        {
+            return string.Empty;
+        }
+
+        var normalized = hashtags
+            .Split([' ', ',', ';', '\n', '\r', '\t'], StringSplitOptions.RemoveEmptyEntries)
+            .Select(tag => tag.Trim())
+            .Where(tag => !string.IsNullOrWhiteSpace(tag))
+            .Select(tag => tag.StartsWith('#') ? tag : $"#{tag}")
+            .Select(tag => new string(tag.Where(character => char.IsLetterOrDigit(character) || character == '#').ToArray()))
+            .Where(tag => tag.Length > 1)
+            .Distinct(StringComparer.OrdinalIgnoreCase)
+            .Take(5)
+            .ToArray();
+
+        return string.Join(' ', normalized);
     }
 }

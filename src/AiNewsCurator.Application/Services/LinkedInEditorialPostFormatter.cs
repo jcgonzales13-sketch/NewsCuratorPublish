@@ -20,6 +20,7 @@ public static partial class LinkedInEditorialPostFormatter
                 $"Why it matters:{Environment.NewLine}{refinedDraft.WhyItMatters.Trim()}",
                 $"Strategic takeaway:{Environment.NewLine}{refinedDraft.StrategicTakeaway.Trim()}",
                 $"Source: {refinedDraft.SourceLabel.Trim()}",
+                string.IsNullOrWhiteSpace(refinedDraft.Hashtags) ? string.Empty : $"Hashtags: {refinedDraft.Hashtags.Trim()}",
                 string.IsNullOrWhiteSpace(refinedDraft.OriginalArticleUrl) ? string.Empty : $"Original article: {refinedDraft.OriginalArticleUrl.Trim()}",
                 refinedDraft.Signature.Trim()
             }.Where(section => !string.IsNullOrWhiteSpace(section)));
@@ -47,6 +48,7 @@ public static partial class LinkedInEditorialPostFormatter
             WhyItMatters = StripSectionLabel(sections.ElementAtOrDefault(3), "Why it matters:"),
             StrategicTakeaway = StripSectionLabel(sections.ElementAtOrDefault(4), "Strategic takeaway:"),
             SourceLabel = StripSectionLabel(sections.ElementAtOrDefault(5), "Source:"),
+            Hashtags = ExtractHashtags(sections),
             OriginalArticleUrl = ExtractOriginalArticleUrl(sections),
             Signature = ExtractSignature(sections)
         };
@@ -77,9 +79,21 @@ public static partial class LinkedInEditorialPostFormatter
             : value.Trim();
     }
 
+    private static string ExtractHashtags(string[] sections)
+    {
+        var hashtagsSection = sections.ElementAtOrDefault(6);
+        if (string.IsNullOrWhiteSpace(hashtagsSection) ||
+            !hashtagsSection.StartsWith("Hashtags:", StringComparison.OrdinalIgnoreCase))
+        {
+            return string.Empty;
+        }
+
+        return StripSectionLabel(hashtagsSection, "Hashtags:");
+    }
+
     private static string ExtractOriginalArticleUrl(string[] sections)
     {
-        var originalArticleSection = sections.ElementAtOrDefault(6);
+        var originalArticleSection = sections.ElementAtOrDefault(GetOriginalArticleSectionIndex(sections));
         if (string.IsNullOrWhiteSpace(originalArticleSection) ||
             !originalArticleSection.StartsWith("Original article:", StringComparison.OrdinalIgnoreCase))
         {
@@ -91,14 +105,23 @@ public static partial class LinkedInEditorialPostFormatter
 
     private static string ExtractSignature(string[] sections)
     {
-        var originalArticleSection = sections.ElementAtOrDefault(6);
+        var originalArticleSection = sections.ElementAtOrDefault(GetOriginalArticleSectionIndex(sections));
         if (!string.IsNullOrWhiteSpace(originalArticleSection) &&
             originalArticleSection.StartsWith("Original article:", StringComparison.OrdinalIgnoreCase))
         {
-            return sections.ElementAtOrDefault(7) ?? string.Empty;
+            return sections.ElementAtOrDefault(GetOriginalArticleSectionIndex(sections) + 1) ?? string.Empty;
         }
 
         return originalArticleSection ?? string.Empty;
+    }
+
+    private static int GetOriginalArticleSectionIndex(string[] sections)
+    {
+        var hashtagsSection = sections.ElementAtOrDefault(6);
+        return !string.IsNullOrWhiteSpace(hashtagsSection) &&
+               hashtagsSection.StartsWith("Hashtags:", StringComparison.OrdinalIgnoreCase)
+            ? 7
+            : 6;
     }
 
     [GeneratedRegex("\\s+")]
