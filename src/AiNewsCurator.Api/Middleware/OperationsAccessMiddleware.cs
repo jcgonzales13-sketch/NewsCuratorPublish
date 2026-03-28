@@ -1,18 +1,14 @@
-using AiNewsCurator.Application.DTOs;
-using AiNewsCurator.Api.Operations;
-using Microsoft.Extensions.Options;
+using Microsoft.AspNetCore.Authentication;
 
 namespace AiNewsCurator.Api.Middleware;
 
 public sealed class OperationsAccessMiddleware
 {
     private readonly RequestDelegate _next;
-    private readonly AppOptions _options;
 
-    public OperationsAccessMiddleware(RequestDelegate next, IOptions<AppOptions> options)
+    public OperationsAccessMiddleware(RequestDelegate next)
     {
         _next = next;
-        _options = options.Value;
     }
 
     public async Task InvokeAsync(HttpContext context)
@@ -23,15 +19,17 @@ public sealed class OperationsAccessMiddleware
             return;
         }
 
-        if (context.Request.Path.StartsWithSegments("/ops/login", StringComparison.OrdinalIgnoreCase))
+        if (context.Request.Path.StartsWithSegments("/ops/login", StringComparison.OrdinalIgnoreCase) ||
+            context.Request.Path.StartsWithSegments("/ops/auth", StringComparison.OrdinalIgnoreCase))
         {
             await _next(context);
             return;
         }
 
-        if (context.Request.Cookies.TryGetValue(OperationsAuthCookie.CookieName, out var cookieValue) &&
-            OperationsAuthCookie.Matches(cookieValue, _options.InternalApiKey))
+        var authResult = await context.AuthenticateAsync(Operations.OpsCookieAuthenticationDefaults.Scheme);
+        if (authResult.Succeeded && authResult.Principal?.Identity?.IsAuthenticated == true)
         {
+            context.User = authResult.Principal;
             await _next(context);
             return;
         }

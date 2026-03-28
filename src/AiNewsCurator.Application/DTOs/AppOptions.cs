@@ -4,6 +4,12 @@ public sealed class AppOptions
 {
     public string DatabasePath { get; set; } = "data/ainews.db";
     public string PublishMode { get; set; } = "Manual";
+    public string OpsAuthMode { get; set; } = "EmailCode";
+    public string OpsSessionCookieName { get; set; } = "AiNewsCurator.Ops.Auth";
+    public int OpsLoginCodeTtlMinutes { get; set; } = 10;
+    public int OpsLoginMaxVerifyAttempts { get; set; } = 5;
+    public string? OpsBootstrapEmail { get; set; }
+    public string? OpsBootstrapName { get; set; }
     public bool EnableScheduler { get; set; }
     public int RunHourLocal { get; set; } = 8;
     public int RunMinuteLocal { get; set; } = 0;
@@ -27,4 +33,11 @@ public sealed class AppOptions
     public int NewsWindowHours { get; set; } = 48;
     public string LinkedInTone { get; set; } = "Editorial";
     public string AttributionFooterLine { get; set; } = "Curated by AI News Curator.";
+    public string SmtpHost { get; set; } = "smtp.gmail.com";
+    public int SmtpPort { get; set; } = 587;
+    public string SmtpSenderName { get; set; } = "AI News Curator";
+    public string? SmtpSenderEmail { get; set; }
+    public string? SmtpUsername { get; set; }
+    public string? SmtpPassword { get; set; }
+    public bool SmtpUseStartTls { get; set; } = true;
 }

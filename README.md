@@ -2,6 +2,8 @@
 
 A .NET 8 application that collects AI and developer news from RSS feeds, stores it in SQLite, curates it with AI-assisted workflows, generates LinkedIn-ready drafts in English, and supports both manual and automatic publishing modes.
 
+For full system documentation, see [docs/system-overview.md](/c:/PublishNews/docs/system-overview.md).
+
 ## Structure
 
 - `src/AiNewsCurator.Api`: internal API endpoints, healthcheck, LinkedIn OAuth callback, and the `/ops` dashboard
@@ -58,7 +60,14 @@ Important settings include:
 
 - `DATABASE_PATH`: path to the SQLite database file
 - `PUBLISH_MODE`: `Manual` or `Automatic`
-- `INTERNAL_API_KEY`: required for `/internal/*` endpoints and `/ops` login
+- `INTERNAL_API_KEY`: required for `/internal/*` endpoints
+- `OPS_AUTH_MODE`: set to `EmailCode` for `/ops`
+- `OPS_BOOTSTRAP_EMAIL`: first approved email seeded into `OpsUsers`
+- `OPS_BOOTSTRAP_NAME`: display name for the bootstrap ops user
+- `OPS_SESSION_COOKIE_NAME`: cookie name used for the `/ops` browser session
+- `OPS_LOGIN_CODE_TTL_MINUTES`: one-time login code lifetime
+- `OPS_LOGIN_MAX_VERIFY_ATTEMPTS`: maximum verification tries per code
+- `SMTP_HOST`, `SMTP_PORT`, `SMTP_SENDER_NAME`, `SMTP_SENDER_EMAIL`, `SMTP_USERNAME`, `SMTP_PASSWORD`, `SMTP_USE_STARTTLS`: Gmail SMTP delivery settings for ops login codes
 - `AI_PROVIDER`: `Heuristic` or `OpenAI`
 - `AI_API_KEY`: required when `AI_PROVIDER=OpenAI`
 - `AI_MODEL_NAME`: model name used for OpenAI Responses API requests
@@ -90,7 +99,23 @@ dotnet run --project src/AiNewsCurator.Worker
 
 ## Ops Dashboard
 
-`GET /ops` provides the internal operational dashboard. It uses the same `INTERNAL_API_KEY`, but through a simple login screen.
+`GET /ops` provides the internal operational dashboard. It now uses email-based one-time login codes for approved users, backed by a secure cookie session.
+
+Ops auth flow:
+
+1. Open `/ops` or `/ops/login`
+2. Enter an approved email address
+3. Receive a 6-digit login code by email
+4. Verify the code
+5. Access `/ops` with an authenticated cookie session for up to 8 hours
+
+Important auth notes:
+
+- only approved emails in `OpsUsers` can sign in
+- one bootstrap ops user can be created automatically from `OPS_BOOTSTRAP_EMAIL`
+- raw login codes are never stored
+- `/internal/*` continues to use `X-API-Key`
+- logout is handled by `POST /ops/auth/logout`
 
 The dashboard supports:
 
@@ -150,6 +175,13 @@ All `/internal/*` endpoints require `X-API-Key`.
 - `POST /internal/drafts/{id}/dismiss`
 - `POST /internal/drafts/{id}/reopen`
 - `GET /internal/runs`
+
+Ops auth endpoints:
+
+- `GET /ops/login`
+- `POST /ops/auth/request-code`
+- `POST /ops/auth/verify-code`
+- `POST /ops/auth/logout`
 
 Example:
 
@@ -260,7 +292,7 @@ Recommended steps:
 
 1. Create the service from `render.yaml`.
 2. Keep `ENABLE_SCHEDULER=true` so the daily routine runs inside the web service.
-3. Configure secrets such as `INTERNAL_API_KEY`, `AI_API_KEY`, `LINKEDIN_CLIENT_ID`, `LINKEDIN_CLIENT_SECRET`, and `LINKEDIN_REDIRECT_URI`.
+3. Configure secrets such as `INTERNAL_API_KEY`, `OPS_BOOTSTRAP_EMAIL`, `SMTP_USERNAME`, `SMTP_PASSWORD`, `AI_API_KEY`, `LINKEDIN_CLIENT_ID`, `LINKEDIN_CLIENT_SECRET`, and `LINKEDIN_REDIRECT_URI`.
 4. Confirm the persistent disk mount path, for example `/var/data/ainews`.
 5. Validate the healthcheck on `/health`.
 
@@ -281,6 +313,15 @@ Run locally:
 ```bash
 docker run --rm -p 8080:8080 \
   -e INTERNAL_API_KEY=changeme \
+  -e OPS_AUTH_MODE=EmailCode \
+  -e OPS_BOOTSTRAP_EMAIL=ops@example.com \
+  -e SMTP_HOST=smtp.gmail.com \
+  -e SMTP_PORT=587 \
+  -e SMTP_SENDER_NAME="AI News Curator" \
+  -e SMTP_SENDER_EMAIL=youraccount@gmail.com \
+  -e SMTP_USERNAME=youraccount@gmail.com \
+  -e SMTP_PASSWORD=your_google_app_password \
+  -e SMTP_USE_STARTTLS=true \
   -e DATABASE_PATH=/var/data/ainews/ainews.db \
   ai-news-curator
 ```

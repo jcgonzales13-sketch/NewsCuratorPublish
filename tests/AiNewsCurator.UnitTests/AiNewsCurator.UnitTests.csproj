@@ -10,6 +10,7 @@
   </PropertyGroup>
 
   <ItemGroup>
+    <ProjectReference Include="..\..\src\AiNewsCurator.Api\AiNewsCurator.Api.csproj" />
     <ProjectReference Include="..\..\src\AiNewsCurator.Application\AiNewsCurator.Application.csproj" />
     <ProjectReference Include="..\..\src\AiNewsCurator.Domain\AiNewsCurator.Domain.csproj" />
     <ProjectReference Include="..\..\src\AiNewsCurator.Infrastructure\AiNewsCurator.Infrastructure.csproj" />

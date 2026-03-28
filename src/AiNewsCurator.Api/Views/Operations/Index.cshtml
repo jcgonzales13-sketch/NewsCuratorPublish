@@ -72,11 +72,14 @@
         </div>
     </div>
 
-    <form method="post" asp-action="Logout">
-        @Html.AntiForgeryToken()
-        <input type="hidden" name="returnUrl" value="@currentReturnUrl" />
-        <button type="submit" class="secondary">Sign out</button>
-    </form>
+    <div class="actions" style="align-items: center;">
+        <span class="badge neutral">Signed in as @(Context.User.FindFirst(System.Security.Claims.ClaimTypes.Email)?.Value ?? Context.User.Identity?.Name ?? "ops user")</span>
+        <form method="post" action="/ops/auth/logout">
+            @Html.AntiForgeryToken()
+            <input type="hidden" name="returnUrl" value="@currentReturnUrl" />
+            <button type="submit" class="secondary">Sign out</button>
+        </form>
+    </div>
 </div>
 
 <script>

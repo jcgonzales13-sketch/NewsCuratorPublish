@@ -2,9 +2,14 @@ using AiNewsCurator.Api.Models.Operations;
 using AiNewsCurator.Api.Operations;
 using AiNewsCurator.Application.DTOs;
 using AiNewsCurator.Application.Interfaces;
+using AiNewsCurator.Application.Services;
 using AiNewsCurator.Domain.Entities;
 using AiNewsCurator.Domain.Enums;
 using AiNewsCurator.Domain.Interfaces;
+using Microsoft.AspNetCore.Authentication;
+using Microsoft.AspNetCore.Authentication.Cookies;
+using Microsoft.AspNetCore.Http.Extensions;
+using System.Security.Claims;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.Extensions.Options;
 using System.Text.Json;
@@ -24,7 +29,7 @@ public sealed class OperationsController : Controller
     private readonly ILinkedInPublisher _linkedInPublisher;
     private readonly IAiCurationService _aiCurationService;
     private readonly INewsImageEnrichmentService _newsImageEnrichmentService;
-    private readonly AppOptions _options;
+    private readonly IOpsAuthService _opsAuthService;
 
     public OperationsController(
         INewsPipelineService pipelineService,
@@ -38,7 +43,7 @@ public sealed class OperationsController : Controller
         ILinkedInPublisher linkedInPublisher,
         IAiCurationService aiCurationService,
         INewsImageEnrichmentService newsImageEnrichmentService,
-        IOptions<AppOptions> options)
+        IOpsAuthService opsAuthService)
     {
         _pipelineService = pipelineService;
         _postDraftRepository = postDraftRepository;
@@ -51,50 +56,81 @@ public sealed class OperationsController : Controller
         _linkedInPublisher = linkedInPublisher;
         _aiCurationService = aiCurationService;
         _newsImageEnrichmentService = newsImageEnrichmentService;
-        _options = options.Value;
+        _opsAuthService = opsAuthService;
     }
 
     [HttpGet("/ops/login")]
-    public IActionResult Login([FromQuery] string? returnUrl = null)
+    public IActionResult Login([FromQuery] string? returnUrl = null, [FromQuery] string? email = null, [FromQuery] string? step = null)
     {
+        if (User.Identity?.IsAuthenticated == true)
+        {
+            return Redirect(SanitizeReturnUrl(returnUrl));
+        }
+
         return View(new OperationsLoginViewModel
         {
-            ReturnUrl = SanitizeReturnUrl(returnUrl)
+            Email = OpsAuthEmailNormalizer.Normalize(email),
+            ReturnUrl = SanitizeReturnUrl(returnUrl),
+            Step = NormalizeLoginStep(step)
         });
     }
 
-    [HttpPost("/ops/login")]
+    [HttpPost("/ops/auth/request-code")]
     [ValidateAntiForgeryToken]
-    public IActionResult Login(OperationsLoginViewModel model)
+    public async Task<IActionResult> RequestCode([FromForm] RequestOpsLoginCodeFormModel model, CancellationToken cancellationToken)
     {
-        if (!string.Equals(model.ApiKey, _options.InternalApiKey, StringComparison.Ordinal))
+        var normalizedEmail = OpsAuthEmailNormalizer.Normalize(model.Email);
+        var result = await _opsAuthService.RequestCodeAsync(normalizedEmail, GetRemoteIp(), GetUserAgent(), cancellationToken);
+        return View(
+            "Login",
+            new OperationsLoginViewModel
+            {
+                Email = normalizedEmail,
+                ReturnUrl = SanitizeReturnUrl(model.ReturnUrl),
+                Step = "verify",
+                InfoMessage = result.Accepted ? result.Message : null,
+                ErrorMessage = result.Accepted ? null : result.Message
+            });
+    }
+
+    [HttpPost("/ops/auth/verify-code")]
+    [ValidateAntiForgeryToken]
+    public async Task<IActionResult> VerifyCode([FromForm] VerifyOpsLoginCodeFormModel model, CancellationToken cancellationToken)
+    {
+        var normalizedEmail = OpsAuthEmailNormalizer.Normalize(model.Email);
+        var result = await _opsAuthService.VerifyCodeAsync(normalizedEmail, model.Code, GetRemoteIp(), GetUserAgent(), cancellationToken);
+        if (!result.Success || result.User is null)
         {
-            model.ErrorMessage = "Invalid API key.";
-            model.ApiKey = string.Empty;
-            model.ReturnUrl = SanitizeReturnUrl(model.ReturnUrl);
-            return View(model);
+            return View(
+                "Login",
+                new OperationsLoginViewModel
+                {
+                    Email = normalizedEmail,
+                    Code = string.Empty,
+                    ReturnUrl = SanitizeReturnUrl(model.ReturnUrl),
+                    Step = "verify",
+                    ErrorMessage = result.ErrorMessage ?? "Invalid or expired code."
+                });
         }
 
-        Response.Cookies.Append(
-            OperationsAuthCookie.CookieName,
-            OperationsAuthCookie.CreateValue(model.ApiKey),
-            new CookieOptions
+        await HttpContext.SignInAsync(
+            OpsCookieAuthenticationDefaults.Scheme,
+            BuildPrincipal(result.User),
+            new AuthenticationProperties
             {
-                HttpOnly = true,
-                IsEssential = true,
-                SameSite = SameSiteMode.Lax,
-                Secure = Request.IsHttps,
-                Expires = DateTimeOffset.UtcNow.AddHours(8)
+                AllowRefresh = true,
+                ExpiresUtc = DateTimeOffset.UtcNow.AddHours(8),
+                IsPersistent = false
             });
 
         return Redirect(SanitizeReturnUrl(model.ReturnUrl));
     }
 
-    [HttpPost("/ops/logout")]
+    [HttpPost("/ops/auth/logout")]
     [ValidateAntiForgeryToken]
-    public IActionResult Logout([FromForm] string? returnUrl = null)
+    public async Task<IActionResult> Logout([FromForm] string? returnUrl = null)
     {
-        Response.Cookies.Delete(OperationsAuthCookie.CookieName);
+        await HttpContext.SignOutAsync(OpsCookieAuthenticationDefaults.Scheme);
         return RedirectToAction(nameof(Login), new { returnUrl = SanitizeReturnUrl(returnUrl) });
     }
 
@@ -266,7 +302,7 @@ public sealed class OperationsController : Controller
     [ValidateAntiForgeryToken]
     public async Task<IActionResult> ApproveDraft(long id, [FromForm] string? returnUrl = null, CancellationToken cancellationToken = default)
     {
-        var success = await _pipelineService.ApproveDraftAsync(id, "ops-ui", cancellationToken);
+        var success = await _pipelineService.ApproveDraftAsync(id, GetCurrentOpsActor(), cancellationToken);
         SetFlash(success ? "Draft approved." : "Unable to approve the draft.", !success);
         return RedirectToReturnUrl(returnUrl);
     }
@@ -275,7 +311,7 @@ public sealed class OperationsController : Controller
     [ValidateAntiForgeryToken]
     public async Task<IActionResult> RejectDraft(long id, [FromForm] string? returnUrl = null, CancellationToken cancellationToken = default)
     {
-        var success = await _pipelineService.RejectDraftAsync(id, "ops-ui", cancellationToken);
+        var success = await _pipelineService.RejectDraftAsync(id, GetCurrentOpsActor(), cancellationToken);
         SetFlash(success ? "Draft rejected." : "Unable to reject the draft.", !success);
         return RedirectToReturnUrl(returnUrl);
     }
@@ -284,7 +320,7 @@ public sealed class OperationsController : Controller
     [ValidateAntiForgeryToken]
     public async Task<IActionResult> DismissDraft(long id, [FromForm] string? returnUrl = null, CancellationToken cancellationToken = default)
     {
-        var success = await _pipelineService.DismissDraftAsync(id, "ops-ui", cancellationToken);
+        var success = await _pipelineService.DismissDraftAsync(id, GetCurrentOpsActor(), cancellationToken);
         SetFlash(success ? "Draft dismissed from the review queue." : "Unable to dismiss the draft.", !success);
         return RedirectToReturnUrl(returnUrl);
     }
@@ -293,7 +329,7 @@ public sealed class OperationsController : Controller
     [ValidateAntiForgeryToken]
     public async Task<IActionResult> ReopenDraft(long id, [FromForm] string? returnUrl = null, CancellationToken cancellationToken = default)
     {
-        var success = await _pipelineService.ReopenDraftAsync(id, "ops-ui", cancellationToken);
+        var success = await _pipelineService.ReopenDraftAsync(id, GetCurrentOpsActor(), cancellationToken);
         SetFlash(success ? "Draft moved back to the review queue." : "Unable to reopen the draft.", !success);
         return RedirectToReturnUrl(returnUrl);
     }
@@ -302,7 +338,7 @@ public sealed class OperationsController : Controller
     [ValidateAntiForgeryToken]
     public async Task<IActionResult> PublishDraft(long id, [FromForm] string? returnUrl = null, CancellationToken cancellationToken = default)
     {
-        var success = await _pipelineService.PublishDraftAsync(id, "ops-ui", cancellationToken);
+        var success = await _pipelineService.PublishDraftAsync(id, GetCurrentOpsActor(), cancellationToken);
         SetFlash(success ? "Draft published on LinkedIn." : "Unable to publish the draft.", !success);
         return RedirectToReturnUrl(returnUrl);
     }
@@ -352,7 +388,7 @@ public sealed class OperationsController : Controller
     [ValidateAntiForgeryToken]
     public async Task<IActionResult> RegenerateDraft(long id, [FromForm] string? returnUrl = null, CancellationToken cancellationToken = default)
     {
-        var success = await _pipelineService.RegenerateDraftAsync(id, "ops-ui", cancellationToken);
+        var success = await _pipelineService.RegenerateDraftAsync(id, GetCurrentOpsActor(), cancellationToken);
         SetFlash(success ? "Draft regenerated from the latest news item data." : "Unable to regenerate the draft.", !success);
         return RedirectToReturnUrl(returnUrl);
     }
@@ -457,7 +493,7 @@ public sealed class OperationsController : Controller
     [ValidateAntiForgeryToken]
     public async Task<IActionResult> CreateManualDraft(long id, [FromForm] string? returnUrl = null, CancellationToken cancellationToken = default)
     {
-        var success = await _pipelineService.CreateManualDraftAsync(id, "ops-ui", cancellationToken);
+        var success = await _pipelineService.CreateManualDraftAsync(id, GetCurrentOpsActor(), cancellationToken);
         SetFlash(success ? "Manual draft created from the news item." : "Unable to create a draft for this news item.", !success);
         return RedirectToReturnUrl(returnUrl);
     }
@@ -767,6 +803,42 @@ public sealed class OperationsController : Controller
     private IActionResult RedirectToReturnUrl(string? returnUrl)
     {
         return Redirect(SanitizeReturnUrl(returnUrl));
+    }
+
+    private static string NormalizeLoginStep(string? step)
+    {
+        return string.Equals(step, "verify", StringComparison.OrdinalIgnoreCase) ? "verify" : "request";
+    }
+
+    private ClaimsPrincipal BuildPrincipal(OpsUser user)
+    {
+        var claims = new List<Claim>
+        {
+            new(ClaimTypes.NameIdentifier, user.Id.ToString()),
+            new(OpsCookieAuthenticationDefaults.UserIdClaim, user.Id.ToString()),
+            new(ClaimTypes.Email, user.Email),
+            new(ClaimTypes.Name, string.IsNullOrWhiteSpace(user.DisplayName) ? user.Email : user.DisplayName)
+        };
+
+        var identity = new ClaimsIdentity(claims, OpsCookieAuthenticationDefaults.Scheme);
+        return new ClaimsPrincipal(identity);
+    }
+
+    private string GetCurrentOpsActor()
+    {
+        return User.FindFirstValue(ClaimTypes.Email)
+            ?? User.FindFirstValue(ClaimTypes.Name)
+            ?? "ops-ui";
+    }
+
+    private string? GetRemoteIp()
+    {
+        return HttpContext.Connection.RemoteIpAddress?.ToString();
+    }
+
+    private string? GetUserAgent()
+    {
+        return Request.Headers.UserAgent.ToString();
     }
 
     private static void ApplyDraftEdits(PostDraft draft, UpdateDraftFormModel model, PostValidationResult validation)

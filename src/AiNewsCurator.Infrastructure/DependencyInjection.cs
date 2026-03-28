@@ -1,5 +1,6 @@
 using AiNewsCurator.Application.Interfaces;
 using AiNewsCurator.Domain.Interfaces;
+using AiNewsCurator.Infrastructure.Integrations.Email;
 using AiNewsCurator.Infrastructure.Integrations.AI;
 using AiNewsCurator.Infrastructure.Integrations.LinkedIn;
 using AiNewsCurator.Infrastructure.Integrations.NewsCollectors;
@@ -24,12 +25,15 @@ public static class DependencyInjection
         services.AddScoped<IPublicationRepository, PublicationRepository>();
         services.AddScoped<IExecutionRunRepository, ExecutionRunRepository>();
         services.AddScoped<ISettingsRepository, SettingsRepository>();
+        services.AddScoped<IOpsUserRepository, OpsUserRepository>();
+        services.AddScoped<IOpsLoginCodeRepository, OpsLoginCodeRepository>();
 
         services.AddScoped<HeuristicAiCurationService>();
         services.AddScoped<OpenAiResponsesAiCurationService>();
         services.AddScoped<IAiCurationService, ResilientAiCurationService>();
         services.AddScoped<ILinkedInAuthService, LinkedInAuthService>();
         services.AddScoped<ILinkedInPublisher, LinkedInPublisher>();
+        services.AddScoped<IEmailSender, SmtpEmailSender>();
         services.AddScoped<INewsCollector, RssNewsCollector>();
         services.AddScoped<INewsImageEnrichmentService, NewsImageEnrichmentService>();
 

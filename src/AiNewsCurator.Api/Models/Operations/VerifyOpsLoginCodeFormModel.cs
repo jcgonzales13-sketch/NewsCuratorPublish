@@ -1,11 +1,8 @@
 namespace AiNewsCurator.Api.Models.Operations;
 
-public sealed class OperationsLoginViewModel
+public sealed class VerifyOpsLoginCodeFormModel
 {
     public string Email { get; set; } = string.Empty;
     public string Code { get; set; } = string.Empty;
     public string ReturnUrl { get; set; } = "/ops";
-    public string Step { get; set; } = "request";
-    public string? InfoMessage { get; set; }
-    public string? ErrorMessage { get; set; }
 }

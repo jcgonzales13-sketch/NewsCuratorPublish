@@ -126,6 +126,37 @@ public sealed class SqliteDatabaseInitializer : IDatabaseInitializer
                 Value TEXT NOT NULL,
                 UpdatedAt TEXT NOT NULL
             );
+
+            CREATE TABLE IF NOT EXISTS OpsUsers (
+                Id INTEGER PRIMARY KEY AUTOINCREMENT,
+                Email TEXT NOT NULL UNIQUE,
+                DisplayName TEXT NULL,
+                IsActive INTEGER NOT NULL DEFAULT 1,
+                CreatedAtUtc TEXT NOT NULL,
+                UpdatedAtUtc TEXT NOT NULL,
+                LastLoginAtUtc TEXT NULL
+            );
+            CREATE INDEX IF NOT EXISTS IX_OpsUsers_Email ON OpsUsers(Email);
+
+            CREATE TABLE IF NOT EXISTS OpsLoginCodes (
+                Id INTEGER PRIMARY KEY AUTOINCREMENT,
+                OpsUserId INTEGER NOT NULL,
+                Email TEXT NOT NULL,
+                CodeHash TEXT NOT NULL,
+                CreatedAtUtc TEXT NOT NULL,
+                ExpiresAtUtc TEXT NOT NULL,
+                UsedAtUtc TEXT NULL,
+                InvalidatedAtUtc TEXT NULL,
+                RequestIp TEXT NULL,
+                RequestUserAgent TEXT NULL,
+                ConsumeIp TEXT NULL,
+                ConsumeUserAgent TEXT NULL,
+                AttemptCount INTEGER NOT NULL DEFAULT 0,
+                FOREIGN KEY (OpsUserId) REFERENCES OpsUsers(Id)
+            );
+            CREATE INDEX IF NOT EXISTS IX_OpsLoginCodes_Email ON OpsLoginCodes(Email);
+            CREATE INDEX IF NOT EXISTS IX_OpsLoginCodes_OpsUserId ON OpsLoginCodes(OpsUserId);
+            CREATE INDEX IF NOT EXISTS IX_OpsLoginCodes_ExpiresAtUtc ON OpsLoginCodes(ExpiresAtUtc);
             """;
 
         await command.ExecuteNonQueryAsync(cancellationToken);
