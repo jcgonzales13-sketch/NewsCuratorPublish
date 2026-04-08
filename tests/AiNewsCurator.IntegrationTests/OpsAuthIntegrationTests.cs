@@ -37,34 +37,36 @@ public sealed class OpsAuthIntegrationTests : IAsyncLifetime
     }
 
     [Fact]
-    public async Task RequestCode_For_Authorized_Email_Should_Store_Hashed_Code()
+    public async Task RequestCode_For_Any_Email_Should_Store_Hashed_Code()
     {
         var now = new DateTimeOffset(2026, 03, 28, 12, 0, 0, TimeSpan.Zero);
-        await SeedOpsUserAsync("ops@example.com");
         var emailSender = new CapturingEmailSender();
         var service = CreateService(emailSender, now);
 
         var result = await service.RequestCodeAsync("ops@example.com", "127.0.0.1", "IntegrationTest", CancellationToken.None);
         var rowCount = await ExecuteScalarAsync("SELECT COUNT(*) FROM OpsLoginCodes");
         var storedHash = await ExecuteStringScalarAsync("SELECT CodeHash FROM OpsLoginCodes LIMIT 1");
+        var userCount = await ExecuteScalarAsync("SELECT COUNT(*) FROM OpsUsers WHERE Email = 'ops@example.com'");
 
         Assert.True(result.Accepted);
         Assert.Equal(1, rowCount);
+        Assert.Equal(1, userCount);
         Assert.NotNull(storedHash);
         Assert.DoesNotContain(emailSender.LastCode!, storedHash!, StringComparison.Ordinal);
     }
 
     [Fact]
-    public async Task RequestCode_For_Unknown_Email_Should_Return_Generic_Success_Without_Stored_Code()
+    public async Task RequestCode_For_Unknown_Email_Should_Create_User_And_Store_Code()
     {
         var service = CreateService(new CapturingEmailSender(), new DateTimeOffset(2026, 03, 28, 12, 0, 0, TimeSpan.Zero));
 
         var result = await service.RequestCodeAsync("unknown@example.com", "127.0.0.1", "IntegrationTest", CancellationToken.None);
         var rowCount = await ExecuteScalarAsync("SELECT COUNT(*) FROM OpsLoginCodes");
+        var userCount = await ExecuteScalarAsync("SELECT COUNT(*) FROM OpsUsers WHERE Email = 'unknown@example.com'");
 
         Assert.True(result.Accepted);
-        Assert.Equal("If the email is authorized, a login code has been sent.", result.Message);
-        Assert.Equal(0, rowCount);
+        Assert.Equal(1, rowCount);
+        Assert.Equal(1, userCount);
     }
 
     [Fact]

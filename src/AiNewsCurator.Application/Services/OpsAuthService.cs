@@ -42,13 +42,6 @@ public sealed class OpsAuthService : IOpsAuthService
             return new OpsRequestCodeResult { Accepted = true, Message = GenericRequestCodeMessage };
         }
 
-        var user = await _opsUserRepository.FindByEmailAsync(normalizedEmail, cancellationToken);
-        if (user is null || !user.IsActive)
-        {
-            _logger.LogInformation("Ops login code request ignored for unknown or inactive email {Email}.", normalizedEmail);
-            return new OpsRequestCodeResult { Accepted = true, Message = GenericRequestCodeMessage };
-        }
-
         var now = _timeProvider.GetUtcNow();
         if (await IsRequestRateLimitedAsync(normalizedEmail, ipAddress, now, cancellationToken))
         {
@@ -58,6 +51,33 @@ public sealed class OpsAuthService : IOpsAuthService
                 Accepted = false,
                 IsRateLimited = true,
                 Message = "Too many attempts. Please wait and try again."
+            };
+        }
+
+        var user = await _opsUserRepository.FindByEmailAsync(normalizedEmail, cancellationToken);
+        if (user is null)
+        {
+            await _opsUserRepository.AddAsync(
+                new OpsUser
+                {
+                    Email = normalizedEmail,
+                    IsActive = true,
+                    CreatedAtUtc = now,
+                    UpdatedAtUtc = now
+                },
+                cancellationToken);
+
+            user = await _opsUserRepository.FindByEmailAsync(normalizedEmail, cancellationToken);
+        }
+
+        if (user is null || !user.IsActive)
+        {
+            _logger.LogWarning("Ops login code request could not resolve an active ops user for email {Email}.", normalizedEmail);
+            return new OpsRequestCodeResult
+            {
+                Accepted = false,
+                IsSystemError = true,
+                Message = "Unable to send email right now."
             };
         }
 

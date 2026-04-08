@@ -36,15 +36,9 @@ public sealed class OpsAuthServiceTests
     }
 
     [Fact]
-    public async Task RequestCode_Should_Store_Hashed_Code_And_Send_Email_For_Active_User()
+    public async Task RequestCode_Should_Store_Hashed_Code_And_Send_Email_For_Any_Email()
     {
-        var userRepository = new FakeOpsUserRepository(
-            new OpsUser
-            {
-                Id = 7,
-                Email = "ops@example.com",
-                IsActive = true
-            });
+        var userRepository = new FakeOpsUserRepository();
         var codeRepository = new FakeOpsLoginCodeRepository();
         var emailSender = new FakeEmailSender();
         var service = CreateService(userRepository, codeRepository, emailSender);
@@ -57,17 +51,23 @@ public sealed class OpsAuthServiceTests
         Assert.NotEmpty(emailSender.Messages);
         Assert.DoesNotContain("123456", codeRepository.StoredCodes[0].CodeHash, StringComparison.Ordinal);
         Assert.Equal("ops@example.com", codeRepository.StoredCodes[0].Email);
+        Assert.Contains(userRepository.Users, user => user.Email == "ops@example.com" && user.IsActive);
     }
 
     [Fact]
-    public async Task RequestCode_Should_Return_Generic_Success_For_Unknown_Email()
+    public async Task RequestCode_Should_Create_User_And_Send_Email_For_Unknown_Email()
     {
-        var service = CreateService(new FakeOpsUserRepository(), new FakeOpsLoginCodeRepository(), new FakeEmailSender());
+        var userRepository = new FakeOpsUserRepository();
+        var codeRepository = new FakeOpsLoginCodeRepository();
+        var emailSender = new FakeEmailSender();
+        var service = CreateService(userRepository, codeRepository, emailSender);
 
         var result = await service.RequestCodeAsync("unknown@example.com", "127.0.0.1", "UnitTest", CancellationToken.None);
 
         Assert.True(result.Accepted);
-        Assert.Equal("If the email is authorized, a login code has been sent.", result.Message);
+        Assert.Single(codeRepository.StoredCodes);
+        Assert.Single(emailSender.Messages);
+        Assert.Contains(userRepository.Users, user => user.Email == "unknown@example.com" && user.IsActive);
     }
 
     [Fact]
@@ -192,6 +192,7 @@ public sealed class OpsAuthServiceTests
             _users = users.ToList();
         }
 
+        public IReadOnlyList<OpsUser> Users => _users;
         public OpsUser? UpdatedUser { get; private set; }
 
         public Task<OpsUser?> FindByEmailAsync(string normalizedEmail, CancellationToken cancellationToken)
@@ -202,6 +203,11 @@ public sealed class OpsAuthServiceTests
 
         public Task AddAsync(OpsUser user, CancellationToken cancellationToken)
         {
+            if (user.Id == 0)
+            {
+                user.Id = _users.Count == 0 ? 1 : _users.Max(existing => existing.Id) + 1;
+            }
+
             _users.Add(user);
             return Task.CompletedTask;
         }
