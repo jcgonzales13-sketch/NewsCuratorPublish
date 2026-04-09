@@ -22,7 +22,7 @@
                 <h1 style="margin-top: 0; margin-bottom: 0;">AI News Curator Ops</h1>
             </div>
         </div>
-        <p class="muted">Enter your email to receive a one-time login code.</p>
+        <p class="muted">Enter your email and admin password to access operations.</p>
 
         @if (!string.IsNullOrWhiteSpace(Model.InfoMessage))
         {
@@ -34,49 +34,25 @@
             <div class="flash error">@Model.ErrorMessage</div>
         }
 
-        @if (!string.Equals(Model.Step, "verify", StringComparison.OrdinalIgnoreCase))
-        {
-            <form method="post" action="/ops/auth/request-code">
-                @Html.AntiForgeryToken()
-                <input type="hidden" asp-for="ReturnUrl" />
+        <form method="post" action="/ops/auth/login">
+            @Html.AntiForgeryToken()
+            <input type="hidden" asp-for="ReturnUrl" />
 
-                <label asp-for="Email">
-                    Email
-                    <input asp-for="Email" type="email" autocomplete="email" />
-                </label>
+            <label asp-for="Email">
+                Email
+                <input asp-for="Email" type="email" autocomplete="email" />
+            </label>
 
-                <div class="actions" style="margin-top: 16px;">
-                    <button type="submit">Send code</button>
-                </div>
-                <div id="ops-login-loading" class="ops-login-loading muted">Sending code... Please wait.</div>
-            </form>
-        }
-        else
-        {
-            <p class="muted">Enter the 6-digit code sent to your email.</p>
+            <label asp-for="Password">
+                Password
+                <input asp-for="Password" type="password" autocomplete="current-password" />
+            </label>
 
-            <form method="post" action="/ops/auth/verify-code">
-                @Html.AntiForgeryToken()
-                <input type="hidden" asp-for="ReturnUrl" />
-
-                <label asp-for="Email">
-                    Email
-                    <input asp-for="Email" type="email" autocomplete="email" />
-                </label>
-
-                <label asp-for="Code">
-                    6-digit code
-                    <input asp-for="Code" inputmode="numeric" autocomplete="one-time-code" maxlength="6" pattern="[0-9]{6}" />
-                </label>
-
-                <div class="actions" style="margin-top: 16px;">
-                    <button type="submit">Verify code</button>
-                    <button type="submit" formaction="/ops/auth/request-code" class="secondary">Resend code</button>
-                    <a class="button-link secondary" href="/ops/login?returnUrl=@Uri.EscapeDataString(Model.ReturnUrl)">Back</a>
-                </div>
-                <div id="ops-login-loading" class="ops-login-loading muted">Verifying code... Please wait.</div>
-            </form>
-        }
+            <div class="actions" style="margin-top: 16px;">
+                <button type="submit">Sign in</button>
+            </div>
+            <div id="ops-login-loading" class="ops-login-loading muted">Signing in... Please wait.</div>
+        </form>
     </div>
 </div>
 

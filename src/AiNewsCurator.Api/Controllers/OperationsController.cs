@@ -10,6 +10,8 @@ using Microsoft.AspNetCore.Authentication;
 using Microsoft.AspNetCore.Authentication.Cookies;
 using Microsoft.AspNetCore.Http.Extensions;
 using System.Security.Claims;
+using System.Security.Cryptography;
+using System.Text;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.Extensions.Options;
 using System.Text.Json;
@@ -29,7 +31,7 @@ public sealed class OperationsController : Controller
     private readonly ILinkedInPublisher _linkedInPublisher;
     private readonly IAiCurationService _aiCurationService;
     private readonly INewsImageEnrichmentService _newsImageEnrichmentService;
-    private readonly IOpsAuthService _opsAuthService;
+    private readonly AppOptions _appOptions;
 
     public OperationsController(
         INewsPipelineService pipelineService,
@@ -43,7 +45,7 @@ public sealed class OperationsController : Controller
         ILinkedInPublisher linkedInPublisher,
         IAiCurationService aiCurationService,
         INewsImageEnrichmentService newsImageEnrichmentService,
-        IOpsAuthService opsAuthService)
+        IOptions<AppOptions> appOptions)
     {
         _pipelineService = pipelineService;
         _postDraftRepository = postDraftRepository;
@@ -56,7 +58,7 @@ public sealed class OperationsController : Controller
         _linkedInPublisher = linkedInPublisher;
         _aiCurationService = aiCurationService;
         _newsImageEnrichmentService = newsImageEnrichmentService;
-        _opsAuthService = opsAuthService;
+        _appOptions = appOptions.Value;
     }
 
     [HttpGet("/ops/login")]
@@ -71,54 +73,40 @@ public sealed class OperationsController : Controller
         {
             Email = OpsAuthEmailNormalizer.Normalize(email),
             ReturnUrl = SanitizeReturnUrl(returnUrl),
-            Step = NormalizeLoginStep(step),
             InfoMessage = string.Equals(reason, "session-expired", StringComparison.OrdinalIgnoreCase)
                 ? "Your session expired. Please sign in again."
                 : null
         });
     }
 
-    [HttpPost("/ops/auth/request-code")]
+    [HttpPost("/ops/auth/login")]
     [ValidateAntiForgeryToken]
-    public async Task<IActionResult> RequestCode([FromForm] RequestOpsLoginCodeFormModel model, CancellationToken cancellationToken)
+    public async Task<IActionResult> LoginWithPassword([FromForm] LoginOpsFormModel model)
     {
         var normalizedEmail = OpsAuthEmailNormalizer.Normalize(model.Email);
-        var result = await _opsAuthService.RequestCodeAsync(normalizedEmail, GetRemoteIp(), GetUserAgent(), cancellationToken);
-        return View(
-            "Login",
-            new OperationsLoginViewModel
+        if (string.IsNullOrWhiteSpace(normalizedEmail) || string.IsNullOrWhiteSpace(model.Password))
+        {
+            return View("Login", new OperationsLoginViewModel
             {
                 Email = normalizedEmail,
                 ReturnUrl = SanitizeReturnUrl(model.ReturnUrl),
-                Step = "verify",
-                InfoMessage = result.Accepted ? result.Message : null,
-                ErrorMessage = result.Accepted ? null : result.Message
+                ErrorMessage = "Enter your email and password."
             });
-    }
+        }
 
-    [HttpPost("/ops/auth/verify-code")]
-    [ValidateAntiForgeryToken]
-    public async Task<IActionResult> VerifyCode([FromForm] VerifyOpsLoginCodeFormModel model, CancellationToken cancellationToken)
-    {
-        var normalizedEmail = OpsAuthEmailNormalizer.Normalize(model.Email);
-        var result = await _opsAuthService.VerifyCodeAsync(normalizedEmail, model.Code, GetRemoteIp(), GetUserAgent(), cancellationToken);
-        if (!result.Success || result.User is null)
+        if (!IsValidAdminPassword(model.Password, _appOptions.OpsAdminPassword))
         {
-            return View(
-                "Login",
-                new OperationsLoginViewModel
-                {
-                    Email = normalizedEmail,
-                    Code = string.Empty,
-                    ReturnUrl = SanitizeReturnUrl(model.ReturnUrl),
-                    Step = "verify",
-                    ErrorMessage = result.ErrorMessage ?? "Invalid or expired code."
-                });
+            return View("Login", new OperationsLoginViewModel
+            {
+                Email = normalizedEmail,
+                ReturnUrl = SanitizeReturnUrl(model.ReturnUrl),
+                ErrorMessage = "Invalid email or password."
+            });
         }
 
         await HttpContext.SignInAsync(
             OpsCookieAuthenticationDefaults.Scheme,
-            BuildPrincipal(result.User),
+            BuildPrincipal(normalizedEmail),
             new AuthenticationProperties
             {
                 AllowRefresh = true,
@@ -795,7 +783,12 @@ public sealed class OperationsController : Controller
 
     private static string SanitizeReturnUrl(string? returnUrl)
     {
-        if (string.IsNullOrWhiteSpace(returnUrl) || !Uri.TryCreate(returnUrl, UriKind.Relative, out _))
+        if (string.IsNullOrWhiteSpace(returnUrl) ||
+            !returnUrl.StartsWith("/", StringComparison.Ordinal) ||
+            returnUrl.StartsWith("//", StringComparison.Ordinal) ||
+            returnUrl.StartsWith("/\\", StringComparison.Ordinal) ||
+            returnUrl.Contains('\\') ||
+            !Uri.TryCreate(returnUrl, UriKind.Relative, out _))
         {
             return "/ops";
         }
@@ -808,23 +801,30 @@ public sealed class OperationsController : Controller
         return Redirect(SanitizeReturnUrl(returnUrl));
     }
 
-    private static string NormalizeLoginStep(string? step)
-    {
-        return string.Equals(step, "verify", StringComparison.OrdinalIgnoreCase) ? "verify" : "request";
-    }
-
-    private ClaimsPrincipal BuildPrincipal(OpsUser user)
+    private ClaimsPrincipal BuildPrincipal(string email)
     {
         var claims = new List<Claim>
         {
-            new(ClaimTypes.NameIdentifier, user.Id.ToString()),
-            new(OpsCookieAuthenticationDefaults.UserIdClaim, user.Id.ToString()),
-            new(ClaimTypes.Email, user.Email),
-            new(ClaimTypes.Name, string.IsNullOrWhiteSpace(user.DisplayName) ? user.Email : user.DisplayName)
+            new(ClaimTypes.NameIdentifier, email),
+            new(OpsCookieAuthenticationDefaults.UserIdClaim, email),
+            new(ClaimTypes.Email, email),
+            new(ClaimTypes.Name, email)
         };
 
         var identity = new ClaimsIdentity(claims, OpsCookieAuthenticationDefaults.Scheme);
         return new ClaimsPrincipal(identity);
+    }
+
+    private static bool IsValidAdminPassword(string providedPassword, string? configuredPassword)
+    {
+        if (string.IsNullOrWhiteSpace(providedPassword) || string.IsNullOrWhiteSpace(configuredPassword))
+        {
+            return false;
+        }
+
+        var providedBytes = Encoding.UTF8.GetBytes(providedPassword);
+        var configuredBytes = Encoding.UTF8.GetBytes(configuredPassword);
+        return CryptographicOperations.FixedTimeEquals(providedBytes, configuredBytes);
     }
 
     private string GetCurrentOpsActor()

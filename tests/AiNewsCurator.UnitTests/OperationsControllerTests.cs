@@ -10,6 +10,7 @@ using AiNewsCurator.Domain.Interfaces;
 using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.AspNetCore.Mvc.ViewFeatures;
+using Microsoft.Extensions.Options;
 using System.Security.Claims;
 
 namespace AiNewsCurator.UnitTests;
@@ -27,6 +28,20 @@ public sealed class OperationsControllerTests
         Assert.Equal("/ops", model.ReturnUrl);
     }
 
+    [Theory]
+    [InlineData("//evil.com")]
+    [InlineData("/\\evil")]
+    [InlineData("/ops\\drafts")]
+    public void Login_Get_Should_Reject_Non_Local_ReturnUrl_Shapes(string returnUrl)
+    {
+        var controller = CreateController(isAuthenticated: false);
+
+        var result = Assert.IsType<ViewResult>(controller.Login(returnUrl));
+        var model = Assert.IsType<OperationsLoginViewModel>(result.Model);
+
+        Assert.Equal("/ops", model.ReturnUrl);
+    }
+
     [Fact]
     public void Login_Get_Should_Show_Session_Expired_Message()
     {
@@ -39,28 +54,20 @@ public sealed class OperationsControllerTests
     }
 
     [Fact]
-    public async Task RequestCode_Should_Return_Verify_View_With_Generic_Message()
+    public async Task LoginWithPassword_Should_Return_Error_When_Password_Is_Invalid()
     {
-        var opsAuthService = new FakeOpsAuthService
-        {
-            RequestResult = new OpsRequestCodeResult
-            {
-                Accepted = true,
-                Message = "If the email is authorized, a login code has been sent."
-            }
-        };
-        var controller = CreateController(opsAuthService: opsAuthService);
+        var controller = CreateController(appOptions: new AppOptions { OpsAdminPassword = "secret123" });
 
-        var result = Assert.IsType<ViewResult>(await controller.RequestCode(new RequestOpsLoginCodeFormModel
+        var result = Assert.IsType<ViewResult>(await controller.LoginWithPassword(new LoginOpsFormModel
         {
             Email = "OPS@Example.com ",
+            Password = "wrong",
             ReturnUrl = "/ops"
-        }, CancellationToken.None));
+        }));
         var model = Assert.IsType<OperationsLoginViewModel>(result.Model);
 
         Assert.Equal("ops@example.com", model.Email);
-        Assert.Equal("verify", model.Step);
-        Assert.Equal("If the email is authorized, a login code has been sent.", model.InfoMessage);
+        Assert.Equal("Invalid email or password.", model.ErrorMessage);
     }
 
     [Fact]
@@ -226,7 +233,7 @@ public sealed class OperationsControllerTests
         FakeLinkedInPublisher? linkedInPublisher = null,
         FakeAiCurationService? aiCurationService = null,
         INewsImageEnrichmentService? newsImageEnrichmentService = null,
-        IOpsAuthService? opsAuthService = null,
+        AppOptions? appOptions = null,
         bool isAuthenticated = true)
     {
         var controller = new OperationsController(
@@ -241,7 +248,7 @@ public sealed class OperationsControllerTests
             linkedInPublisher ?? new FakeLinkedInPublisher(),
             aiCurationService ?? new FakeAiCurationService(),
             newsImageEnrichmentService ?? new FakeNewsImageEnrichmentService(),
-            opsAuthService ?? new FakeOpsAuthService());
+            Options.Create(appOptions ?? new AppOptions { OpsAdminPassword = "secret123" }));
 
         var httpContext = new DefaultHttpContext();
         httpContext.User = isAuthenticated
@@ -374,17 +381,5 @@ public sealed class OperationsControllerTests
     private sealed class FakeNewsImageEnrichmentService : INewsImageEnrichmentService
     {
         public Task<int> BackfillMissingImagesAsync(CancellationToken cancellationToken) => Task.FromResult(0);
-    }
-
-    private sealed class FakeOpsAuthService : IOpsAuthService
-    {
-        public OpsRequestCodeResult RequestResult { get; set; } = new() { Accepted = true };
-        public OpsAuthResult VerifyResult { get; set; } = new() { Success = true, User = new OpsUser { Id = 1, Email = "ops@example.com" } };
-
-        public Task<OpsRequestCodeResult> RequestCodeAsync(string email, string? ipAddress, string? userAgent, CancellationToken cancellationToken)
-            => Task.FromResult(RequestResult);
-
-        public Task<OpsAuthResult> VerifyCodeAsync(string email, string code, string? ipAddress, string? userAgent, CancellationToken cancellationToken)
-            => Task.FromResult(VerifyResult);
     }
 }

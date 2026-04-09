@@ -13,6 +13,7 @@ public static class AppOptionEnvironmentMapper
             ["DatabasePath"] = Environment.GetEnvironmentVariable("DATABASE_PATH"),
             ["PublishMode"] = Environment.GetEnvironmentVariable("PUBLISH_MODE"),
             ["OpsAuthMode"] = Environment.GetEnvironmentVariable("OPS_AUTH_MODE"),
+            ["OpsAdminPassword"] = Environment.GetEnvironmentVariable("OPS_ADMIN_PASSWORD"),
             ["OpsSessionCookieName"] = Environment.GetEnvironmentVariable("OPS_SESSION_COOKIE_NAME"),
             ["OpsLoginCodeTtlMinutes"] = Environment.GetEnvironmentVariable("OPS_LOGIN_CODE_TTL_MINUTES"),
             ["OpsLoginMaxVerifyAttempts"] = Environment.GetEnvironmentVariable("OPS_LOGIN_MAX_VERIFY_ATTEMPTS"),

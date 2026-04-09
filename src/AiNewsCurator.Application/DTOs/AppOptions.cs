@@ -5,6 +5,7 @@ public sealed class AppOptions
     public string DatabasePath { get; set; } = "data/ainews.db";
     public string PublishMode { get; set; } = "Manual";
     public string OpsAuthMode { get; set; } = "EmailCode";
+    public string? OpsAdminPassword { get; set; }
     public string OpsSessionCookieName { get; set; } = "AiNewsCurator.Ops.Auth";
     public int OpsLoginCodeTtlMinutes { get; set; } = 10;
     public int OpsLoginMaxVerifyAttempts { get; set; } = 5;
