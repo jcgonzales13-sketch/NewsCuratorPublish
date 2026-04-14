@@ -260,6 +260,20 @@ public sealed class OperationsController : Controller
         return RedirectToReturnUrl(returnUrl);
     }
 
+    [HttpPost("/ops/actions/refresh-content")]
+    [ValidateAntiForgeryToken]
+    public async Task<IActionResult> RefreshContent([FromForm] string? returnUrl = null, CancellationToken cancellationToken = default)
+    {
+        var collected = await _pipelineService.RunCollectAsync(BuildTriggerContext("ops-refresh-collect"), cancellationToken);
+        var normalized = await _newsItemRepository.NormalizeStoredContentAsync(cancellationToken);
+        var imagesEnriched = await _newsImageEnrichmentService.BackfillMissingImagesAsync(cancellationToken);
+        var curated = await _pipelineService.RunCurateAsync(BuildTriggerContext("ops-refresh-curate"), cancellationToken);
+        var regenerated = await _pipelineService.RegenerateExistingDraftsAsync("ops-refresh-regenerate", cancellationToken);
+
+        SetFlash($"Refresh completed. Collected: {collected}. Curated: {curated}. Images enriched: {imagesEnriched}. News normalized: {normalized}. Drafts refreshed: {regenerated}.");
+        return RedirectToReturnUrl(returnUrl);
+    }
+
     [HttpPost("/ops/actions/collect")]
     [ValidateAntiForgeryToken]
     public async Task<IActionResult> RunCollect([FromForm] string? returnUrl = null, CancellationToken cancellationToken = default)
@@ -384,6 +398,15 @@ public sealed class OperationsController : Controller
         return RedirectToReturnUrl(returnUrl);
     }
 
+    [HttpPost("/ops/drafts/{id:long}/replace")]
+    [ValidateAntiForgeryToken]
+    public async Task<IActionResult> ReplaceDraft(long id, [FromForm] string? returnUrl = null, CancellationToken cancellationToken = default)
+    {
+        var success = await _pipelineService.ReplaceDraftAsync(id, GetCurrentOpsActor(), cancellationToken);
+        SetFlash(success ? "Draft removed from the queue and recreated from the original news item." : "Unable to recreate this draft.", !success);
+        return RedirectToReturnUrl(returnUrl);
+    }
+
     [HttpPost("/ops/sources")]
     [ValidateAntiForgeryToken]
     public async Task<IActionResult> CreateSource([Bind(Prefix = "CreateSource")] CreateSourceFormModel model, [FromForm] string? returnUrl = null, CancellationToken cancellationToken = default)
@@ -486,6 +509,15 @@ public sealed class OperationsController : Controller
     {
         var success = await _pipelineService.CreateManualDraftAsync(id, GetCurrentOpsActor(), cancellationToken);
         SetFlash(success ? "Manual draft created from the news item." : "Unable to create a draft for this news item.", !success);
+        return RedirectToReturnUrl(returnUrl);
+    }
+
+    [HttpPost("/ops/news/{id:long}/reprocess")]
+    [ValidateAntiForgeryToken]
+    public async Task<IActionResult> ReprocessNews(long id, [FromForm] string? returnUrl = null, CancellationToken cancellationToken = default)
+    {
+        var success = await _pipelineService.ReprocessNewsItemAsync(id, GetCurrentOpsActor(), cancellationToken);
+        SetFlash(success ? "News item reprocessed and a fresh draft was created." : "Unable to reprocess this news item.", !success);
         return RedirectToReturnUrl(returnUrl);
     }
 

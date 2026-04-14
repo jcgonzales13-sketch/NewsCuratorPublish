@@ -228,6 +228,23 @@ public sealed class NewsPipelineService : INewsPipelineService
         return await RegenerateDraftInternalAsync(draft, moveToPendingApproval: true, cancellationToken);
     }
 
+    public async Task<bool> ReplaceDraftAsync(long draftId, string requestedBy, CancellationToken cancellationToken)
+    {
+        var draft = await _postDraftRepository.GetByIdAsync(draftId, cancellationToken);
+        if (draft is null || draft.Status == DraftStatus.Published)
+        {
+            return false;
+        }
+
+        var newsItemId = draft.NewsItemId;
+        draft.Status = DraftStatus.Dismissed;
+        draft.ApprovedAt = DateTimeOffset.UtcNow;
+        draft.ApprovedBy = requestedBy;
+        await _postDraftRepository.UpdateAsync(draft, cancellationToken);
+
+        return await CreateManualDraftAsync(newsItemId, requestedBy, cancellationToken);
+    }
+
     public async Task<bool> ReprocessNewsItemAsync(long newsItemId, string requestedBy, CancellationToken cancellationToken)
     {
         var newsItem = await _newsItemRepository.GetByIdAsync(newsItemId, cancellationToken);

@@ -288,6 +288,7 @@ public sealed class ApiControllersAndMiddlewareTests
         public Task<bool> DismissDraftAsync(long draftId, string approvedBy, CancellationToken cancellationToken) => Task.FromResult(true);
         public Task<bool> PublishDraftAsync(long draftId, string approvedBy, CancellationToken cancellationToken) => Task.FromResult(true);
         public Task<bool> RegenerateDraftAsync(long draftId, string requestedBy, CancellationToken cancellationToken) => Task.FromResult(true);
+        public Task<bool> ReplaceDraftAsync(long draftId, string requestedBy, CancellationToken cancellationToken) => Task.FromResult(true);
         public Task<int> RegenerateExistingDraftsAsync(string requestedBy, CancellationToken cancellationToken) => Task.FromResult(0);
         public Task<bool> RejectDraftAsync(long draftId, string approvedBy, CancellationToken cancellationToken) => Task.FromResult(true);
         public Task<bool> ReopenDraftAsync(long draftId, string approvedBy, CancellationToken cancellationToken) => Task.FromResult(true);

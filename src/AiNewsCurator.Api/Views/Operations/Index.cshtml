@@ -166,7 +166,7 @@
     <div class="toolbar">
         <div>
             <h2 style="margin-bottom: 6px;">Quick actions</h2>
-            <div class="muted">Run the pipeline step by step or reconnect LinkedIn.</div>
+            <div class="muted">Use the main button for news, image enrichment, and curation. Step-by-step actions stay available for troubleshooting.</div>
         </div>
         <div class="actions">
             <form method="post" action="/ops/linkedin/connect">
@@ -186,11 +186,21 @@
         </div>
     </div>
 
-    <div class="actions">
+    <div class="actions" style="margin-bottom: 12px;">
+        <form method="post" action="/ops/actions/refresh-content">
+            @Html.AntiForgeryToken()
+            <input type="hidden" name="returnUrl" value="@currentReturnUrl" />
+            <button type="submit" data-loading-text="Updating news, images, and drafts...">Update news + images + curation</button>
+        </form>
+    </div>
+
+    <details>
+        <summary style="cursor: pointer; font-weight: 600;">Advanced step-by-step actions</summary>
+        <div class="actions" style="margin-top: 14px;">
         <form method="post" action="/ops/actions/daily">
             @Html.AntiForgeryToken()
             <input type="hidden" name="returnUrl" value="@currentReturnUrl" />
-            <button type="submit">Run daily flow</button>
+            <button type="submit" class="secondary">Run daily flow</button>
         </form>
         <form method="post" action="/ops/actions/collect">
             @Html.AntiForgeryToken()
@@ -207,7 +217,8 @@
             <input type="hidden" name="returnUrl" value="@currentReturnUrl" />
             <button type="submit" class="secondary">Normalize news</button>
         </form>
-    </div>
+        </div>
+    </details>
 </section>
 
 <div class="grid main-grid" style="margin-top: 20px;">
@@ -576,6 +587,11 @@ Source: @editorial.SourceLabel
                                         <input type="hidden" name="returnUrl" value="@currentReturnUrl" />
                                         <button type="submit" class="secondary">Regenerate draft</button>
                                     </form>
+                                    <form method="post" action="/ops/drafts/@draft.Id/replace">
+                                        @Html.AntiForgeryToken()
+                                        <input type="hidden" name="returnUrl" value="@currentReturnUrl" />
+                                        <button type="submit" class="danger" data-loading-text="Removing and recreating draft...">Remove and recreate</button>
+                                    </form>
                                 }
                             </div>
 
@@ -732,6 +748,11 @@ Source: @editorial.SourceLabel
                                 @Html.AntiForgeryToken()
                                 <input type="hidden" name="returnUrl" value="@currentReturnUrl" />
                                 <button type="submit" class="secondary">Create manual draft</button>
+                            </form>
+                            <form method="post" action="/ops/news/@item.NewsItem.Id/reprocess">
+                                @Html.AntiForgeryToken()
+                                <input type="hidden" name="returnUrl" value="@currentReturnUrl" />
+                                <button type="submit" class="secondary">Reprocess news</button>
                             </form>
                         </div>
                     </article>

@@ -114,6 +114,65 @@ public sealed class NewsPipelineServiceTests
     }
 
     [Fact]
+    public async Task ReplaceDraft_Should_Dismiss_Existing_Draft_And_Create_New_One()
+    {
+        var newsItemRepository = new FakeNewsItemRepository
+        {
+            NewsItem = new NewsItem
+            {
+                Id = 20,
+                SourceId = 1,
+                Title = "OpenAI improves agent workflows",
+                CanonicalUrl = "https://example.com/openai-agent-workflows",
+                Url = "https://example.com/openai-agent-workflows",
+                RawSummary = "OpenAI improves agent workflows.",
+                TitleHash = "title-hash",
+                ContentHash = "content-hash"
+            }
+        };
+        var postDraftRepository = new FakePostDraftRepository
+        {
+            Draft = new PostDraft
+            {
+                Id = 10,
+                NewsItemId = 20,
+                Status = DraftStatus.PendingApproval,
+                PostText = "Old draft",
+                Tone = "Professional",
+                ValidationErrorsJson = "[]"
+            }
+        };
+        var aiService = new FakeAiCurationService
+        {
+            EvaluationResult = new AiEvaluationResult
+            {
+                IsRelevant = true,
+                RelevanceScore = 0.91,
+                ConfidenceScore = 0.88,
+                Category = "Agents",
+                WhyRelevant = "Relevant",
+                Summary = "Summary",
+                KeyPoints = ["Point 1"],
+                LinkedInTitleSuggestion = "OpenAI improves agent workflows",
+                LinkedInDraft = "Fresh draft"
+            },
+            ValidationResult = new PostValidationResult()
+        };
+        var service = CreateService(
+            newsItemRepository: newsItemRepository,
+            postDraftRepository: postDraftRepository,
+            aiCurationService: aiService);
+
+        var success = await service.ReplaceDraftAsync(10, "ops-ui", CancellationToken.None);
+
+        Assert.True(success);
+        Assert.NotNull(postDraftRepository.DismissedDraft);
+        Assert.Equal(DraftStatus.Dismissed, postDraftRepository.DismissedDraft.Status);
+        Assert.NotNull(postDraftRepository.InsertedDraft);
+        Assert.Equal(DraftStatus.PendingApproval, postDraftRepository.InsertedDraft.Status);
+    }
+
+    [Fact]
     public async Task ApproveDraft_Should_AutoPublish_When_Mode_Is_Automatic()
     {
         var postDraftRepository = new FakePostDraftRepository
@@ -359,6 +418,7 @@ public sealed class NewsPipelineServiceTests
     private sealed class FakePostDraftRepository : IPostDraftRepository
     {
         public PostDraft? Draft { get; set; }
+        public PostDraft? DismissedDraft { get; private set; }
         public PostDraft? InsertedDraft { get; private set; }
         public PostDraft? UpdatedDraft { get; private set; }
 
@@ -376,6 +436,12 @@ public sealed class NewsPipelineServiceTests
         public Task UpdateAsync(PostDraft draft, CancellationToken cancellationToken)
         {
             UpdatedDraft = draft;
+            if (draft.Status == DraftStatus.Dismissed)
+            {
+                DismissedDraft = draft;
+                return Task.CompletedTask;
+            }
+
             Draft = draft;
             return Task.CompletedTask;
         }

@@ -9,6 +9,7 @@ public interface INewsPipelineService
     Task<int> RunCurateAsync(TriggerContext triggerContext, CancellationToken cancellationToken);
     Task<int> RegenerateExistingDraftsAsync(string requestedBy, CancellationToken cancellationToken);
     Task<bool> RegenerateDraftAsync(long draftId, string requestedBy, CancellationToken cancellationToken);
+    Task<bool> ReplaceDraftAsync(long draftId, string requestedBy, CancellationToken cancellationToken);
     Task<bool> ReprocessNewsItemAsync(long newsItemId, string requestedBy, CancellationToken cancellationToken);
     Task<bool> CreateManualDraftAsync(long newsItemId, string requestedBy, CancellationToken cancellationToken);
     Task<bool> PublishDraftAsync(long draftId, string approvedBy, CancellationToken cancellationToken);

@@ -221,6 +221,28 @@ public sealed class OperationsControllerTests
         Assert.Equal("success", controller.TempData["FlashType"]);
     }
 
+    [Fact]
+    public async Task RefreshContent_Should_Run_Complete_Content_Flow()
+    {
+        var pipeline = new FakeNewsPipelineService();
+        var newsRepository = new FakeNewsItemRepository { NormalizeCount = 2 };
+        var imageService = new FakeNewsImageEnrichmentService { BackfillCount = 3 };
+        var controller = CreateController(
+            pipelineService: pipeline,
+            newsItemRepository: newsRepository,
+            newsImageEnrichmentService: imageService);
+
+        var result = Assert.IsType<RedirectResult>(await controller.RefreshContent("/ops", CancellationToken.None));
+
+        Assert.Equal("/ops", result.Url);
+        Assert.Equal(1, pipeline.CollectCalls);
+        Assert.Equal(1, pipeline.CurateCalls);
+        Assert.Equal(1, pipeline.RegenerateExistingCalls);
+        Assert.Equal(1, newsRepository.NormalizeCalls);
+        Assert.Equal(1, imageService.BackfillCalls);
+        Assert.Contains("Refresh completed.", controller.TempData["FlashMessage"]?.ToString());
+    }
+
     private static OperationsController CreateController(
         INewsPipelineService? pipelineService = null,
         FakePostDraftRepository? postDraftRepository = null,
@@ -273,17 +295,34 @@ public sealed class OperationsControllerTests
 
     private sealed class FakeNewsPipelineService : INewsPipelineService
     {
+        public int CollectCalls { get; private set; }
+        public int CurateCalls { get; private set; }
+        public int RegenerateExistingCalls { get; private set; }
+
         public Task<bool> ApproveDraftAsync(long draftId, string approvedBy, CancellationToken cancellationToken) => Task.FromResult(true);
         public Task<bool> CreateManualDraftAsync(long newsItemId, string requestedBy, CancellationToken cancellationToken) => Task.FromResult(true);
         public Task<bool> DismissDraftAsync(long draftId, string approvedBy, CancellationToken cancellationToken) => Task.FromResult(true);
         public Task<bool> PublishDraftAsync(long draftId, string approvedBy, CancellationToken cancellationToken) => Task.FromResult(true);
         public Task<bool> RegenerateDraftAsync(long draftId, string requestedBy, CancellationToken cancellationToken) => Task.FromResult(true);
-        public Task<int> RegenerateExistingDraftsAsync(string requestedBy, CancellationToken cancellationToken) => Task.FromResult(0);
+        public Task<bool> ReplaceDraftAsync(long draftId, string requestedBy, CancellationToken cancellationToken) => Task.FromResult(true);
+        public Task<int> RegenerateExistingDraftsAsync(string requestedBy, CancellationToken cancellationToken)
+        {
+            RegenerateExistingCalls++;
+            return Task.FromResult(4);
+        }
         public Task<bool> RejectDraftAsync(long draftId, string approvedBy, CancellationToken cancellationToken) => Task.FromResult(true);
         public Task<bool> ReopenDraftAsync(long draftId, string approvedBy, CancellationToken cancellationToken) => Task.FromResult(true);
         public Task<bool> ReprocessNewsItemAsync(long newsItemId, string requestedBy, CancellationToken cancellationToken) => Task.FromResult(true);
-        public Task<int> RunCollectAsync(TriggerContext triggerContext, CancellationToken cancellationToken) => Task.FromResult(0);
-        public Task<int> RunCurateAsync(TriggerContext triggerContext, CancellationToken cancellationToken) => Task.FromResult(0);
+        public Task<int> RunCollectAsync(TriggerContext triggerContext, CancellationToken cancellationToken)
+        {
+            CollectCalls++;
+            return Task.FromResult(5);
+        }
+        public Task<int> RunCurateAsync(TriggerContext triggerContext, CancellationToken cancellationToken)
+        {
+            CurateCalls++;
+            return Task.FromResult(6);
+        }
         public Task<DailyRunResult> RunDailyAsync(TriggerContext triggerContext, CancellationToken cancellationToken) => Task.FromResult(new DailyRunResult());
     }
 
@@ -325,6 +364,8 @@ public sealed class OperationsControllerTests
     private sealed class FakeNewsItemRepository : INewsItemRepository
     {
         public NewsItem? NewsItem { get; set; }
+        public int NormalizeCount { get; set; }
+        public int NormalizeCalls { get; private set; }
 
         public Task<bool> ExistsRecentSimilarAsync(string titleHash, string contentHash, int lookbackDays, CancellationToken cancellationToken) => Task.FromResult(false);
         public Task<NewsItem?> GetByCanonicalUrlAsync(string canonicalUrl, CancellationToken cancellationToken) => Task.FromResult<NewsItem?>(null);
@@ -334,7 +375,11 @@ public sealed class OperationsControllerTests
         public Task<IReadOnlyList<NewsItem>> GetRecentAsync(int maxItems, CancellationToken cancellationToken) => Task.FromResult<IReadOnlyList<NewsItem>>([]);
         public Task<IReadOnlyList<NewsItem>> GetWithoutImageAsync(CancellationToken cancellationToken) => Task.FromResult<IReadOnlyList<NewsItem>>([]);
         public Task<long> InsertAsync(NewsItem newsItem, CancellationToken cancellationToken) => Task.FromResult(1L);
-        public Task<int> NormalizeStoredContentAsync(CancellationToken cancellationToken) => Task.FromResult(0);
+        public Task<int> NormalizeStoredContentAsync(CancellationToken cancellationToken)
+        {
+            NormalizeCalls++;
+            return Task.FromResult(NormalizeCount);
+        }
         public Task UpdateImageAsync(long id, string imageUrl, string imageOrigin, CancellationToken cancellationToken) => Task.CompletedTask;
         public Task UpdateStatusAsync(long id, NewsItemStatus status, CancellationToken cancellationToken) => Task.CompletedTask;
     }
@@ -380,6 +425,12 @@ public sealed class OperationsControllerTests
 
     private sealed class FakeNewsImageEnrichmentService : INewsImageEnrichmentService
     {
-        public Task<int> BackfillMissingImagesAsync(CancellationToken cancellationToken) => Task.FromResult(0);
+        public int BackfillCount { get; set; }
+        public int BackfillCalls { get; private set; }
+        public Task<int> BackfillMissingImagesAsync(CancellationToken cancellationToken)
+        {
+            BackfillCalls++;
+            return Task.FromResult(BackfillCount);
+        }
     }
 }
